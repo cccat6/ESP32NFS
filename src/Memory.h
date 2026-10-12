@@ -42,7 +42,14 @@ public:
 private:
   MemoryLimits limits_;
   Allocator allocator_;
-  mutable std::atomic_flag control_ = ATOMIC_FLAG_INIT;
+  mutable std::atomic<uint32_t> control_{0};
+  bool enter() const {
+    uint32_t expected = 0;
+    return control_.compare_exchange_strong(expected, 1, std::memory_order_acquire);
+  }
+  void leave() const {
+    control_.store(0, std::memory_order_release);
+  }
   std::atomic<size_t> used_{0}, peak_{0}, allocations_{0};
   std::atomic<uint32_t> failures_{0};
   std::atomic<MemoryError> error_{MemoryError::None};

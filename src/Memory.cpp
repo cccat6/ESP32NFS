@@ -37,10 +37,10 @@ Memory::Memory(const MemoryLimits &limits) : Memory(limits, systemAllocator()) {
 Memory::Memory(const MemoryLimits &limits, const Allocator &allocator)
     : limits_(limits), allocator_(allocator) {}
 bool Memory::getLimits(MemoryLimits &out) const {
-  if (control_.test_and_set(std::memory_order_acquire))
+  if (!enter())
     return false;
   out = limits_;
-  control_.clear(std::memory_order_release);
+  leave();
   return true;
 }
 MemoryStats Memory::stats() const {
@@ -53,14 +53,14 @@ MemoryStats Memory::stats() const {
   return s;
 }
 bool Memory::configure(const MemoryLimits &limits) {
-  if (control_.test_and_set(std::memory_order_acquire)) {
+  if (!enter()) {
     error_ = MemoryError::Busy;
     return false;
   }
   bool valid = limits.maxBytes && limits.maxBytes >= used_.load();
   if (valid)
     limits_ = limits;
-  control_.clear(std::memory_order_release);
+  leave();
   error_ = valid ? MemoryError::None : MemoryError::Invalid;
   return valid;
 }
@@ -72,13 +72,13 @@ void *Memory::failure(MemoryError error) {
 void *Memory::allocate(size_t bytes, bool clear) {
   if (!bytes || !allocator_.allocate || !allocator_.release)
     return failure(MemoryError::Invalid);
-  if (control_.test_and_set(std::memory_order_acquire))
+  if (!enter())
     return failure(MemoryError::Busy);
   const size_t cost = charge(bytes), used = used_.load(), reserve = limits_.reserveBytes;
   bool fits = cost <= limits_.maxBytes && used <= limits_.maxBytes - cost;
   if (fits)
     used_.fetch_add(cost);
-  control_.clear(std::memory_order_release);
+  leave();
   if (!fits)
     return failure(MemoryError::Budget);
   if (allocator_.available) {
