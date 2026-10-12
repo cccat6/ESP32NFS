@@ -41,24 +41,147 @@ jobs:
           assert not any(p.is_symlink() for p in Path('.').rglob('*'))
           PY
 
-  compile:
+  esp32-wifi:
+    name: ESP32 Wi-Fi (${{ matrix.board }})
     runs-on: ubuntu-latest
     strategy:
       fail-fast: false
       matrix:
-        board: [esp32, esp32c3, esp32c6, esp32s3]
+        board: [esp32, esp32s2, esp32s3, esp32c3, esp32c5, esp32c6]
     steps:
       - uses: actions/checkout@v7
       - uses: arduino/setup-arduino-cli@v2
-      - name: Install platform and dependencies
+      - name: Install ESP32 platform and dependencies
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli core install esp32:esp32@3.3.11 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
           arduino-cli lib install 'SdFat@2.3.0'
-      - name: Compile examples
+      - name: Compile application examples
         env:
           BOARD: ${{ matrix.board }}
         run: |
-          for sketch in examples/*; do
-            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$sketch"
+          for sketch in LittleFSShare SdCardShare MappedVolumes MemoryShares; do
+            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
+          done
+
+  esp32-network:
+    name: ESP32 network/storage (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [esp32h2, esp32p4]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install ESP32 platform and dependencies
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.11 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install 'SdFat@2.3.0'
+      - name: Compile network and storage integration
+        env:
+          BOARD: ${{ matrix.board }}
+        run: |
+          mkdir -p "$RUNNER_TEMP/NetworkBuild"
+          cat > "$RUNNER_TEMP/NetworkBuild/NetworkBuild.ino" <<'CPP'
+          #include <ESP32NFS.h>
+          #include <backends/LittleFsStorage.h>
+          #include <backends/SdFatStorage.h>
+          #include <backends/RamVfs.h>
+          #include <backends/RomVfs.h>
+          #include <storage/Partitions.h>
+          #include <storage/SectorJournal.h>
+          #include <transports/SocketTransport.h>
+          using namespace esp32_nfs;
+          LittleFsStorage flash("/littlefs", "spiffs");
+          PathVfs files(flash);
+          SocketTransport transport;
+          esp32_nfs::Server server(files);
+          void setup() { server.begin(transport, Config(), 1); }
+          void loop() { server.poll(millis()); delay(1); }
+          CPP
+          arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/NetworkBuild"
+
+  esp32-source-sdk:
+    name: ESP-IDF (${{ matrix.target }})
+    runs-on: ubuntu-latest
+    container: espressif/idf:v5.5.4
+    strategy:
+      fail-fast: false
+      matrix:
+        target: [esp32c2, esp32c61]
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build core, TCP transport and storage interfaces
+        shell: bash
+        env:
+          TARGET: ${{ matrix.target }}
+        run: |
+          source "$IDF_PATH/export.sh"
+          export LIBRARY_ROOT="$GITHUB_WORKSPACE"
+          project="$RUNNER_TEMP/esp32nfs-native"
+          mkdir -p "$project/main"
+          cat > "$project/CMakeLists.txt" <<'CMAKE'
+          cmake_minimum_required(VERSION 3.16)
+          include($ENV{IDF_PATH}/tools/cmake/project.cmake)
+          project(esp32nfs_native)
+          CMAKE
+          cat > "$project/main/CMakeLists.txt" <<'CMAKE'
+          file(GLOB NFS_SOURCES "$ENV{LIBRARY_ROOT}/src/*.cpp"
+               "$ENV{LIBRARY_ROOT}/src/storage/*.cpp"
+               "$ENV{LIBRARY_ROOT}/src/backends/PathVfs.cpp")
+          idf_component_register(SRCS "main.cpp" ${NFS_SOURCES}
+              INCLUDE_DIRS "$ENV{LIBRARY_ROOT}/src"
+              REQUIRES lwip esp_netif freertos esp_hw_support)
+          CMAKE
+          cat > "$project/main/main.cpp" <<'CPP'
+          #include <ESP32NFS.h>
+          #include <backends/RamVfs.h>
+          #include <backends/RomVfs.h>
+          #include <backends/PathVfs.h>
+          #include <storage/Partitions.h>
+          #include <storage/SectorJournal.h>
+          #include <transports/SocketTransport.h>
+          #include <esp_netif.h>
+          #include <esp_random.h>
+          #include <freertos/FreeRTOS.h>
+          #include <freertos/task.h>
+          using namespace esp32_nfs;
+          static uint8_t bytes[4096];
+          static RamVfs::Slot slots[1];
+          static RamVfs ram(slots, 1);
+          static SocketTransport transport;
+          static esp32_nfs::Server server(ram);
+          extern "C" void app_main() {
+            ESP_ERROR_CHECK(esp_netif_init());
+            slots[0].data = bytes; slots[0].capacity = sizeof(bytes);
+            uint64_t epoch = (uint64_t(esp_random()) << 32) | esp_random();
+            server.begin(transport, Config(), epoch ? epoch : 1);
+            for (;;) { server.poll(xTaskGetTickCount() * portTICK_PERIOD_MS); vTaskDelay(1); }
+          }
+          CPP
+          idf.py --preview -C "$project" -B "$project/build" -DIDF_TARGET="$TARGET" build
+
+  pico:
+    name: Pico Wi-Fi (${{ matrix.board }})
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [rpipicow, rpipico2w]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install Arduino-Pico and SdFat
+        run: |
+          arduino-cli core update-index --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli core install rp2040:rp2040@6.0.0 --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
+          arduino-cli lib install 'SdFat@2.3.0'
+      - name: Compile Pico filesystem and SD examples
+        env:
+          BOARD: ${{ matrix.board }}
+        run: |
+          for sketch in PicoWShare PicoSdCardShare; do
+            arduino-cli compile --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "examples/$sketch"
           done

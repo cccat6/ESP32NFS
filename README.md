@@ -4,7 +4,7 @@
 [![Release](https://img.shields.io/github/v/release/cccat6/ESP32NFS)](https://github.com/cccat6/ESP32NFS/releases)
 [![License: MIT](https://img.shields.io/badge/License-MIT-blue.svg)](LICENSE)
 
-**NFSv3 file sharing for ESP32.** Share SD cards, internal Flash, RAM and firmware assets over Wi-Fi through a common storage interface.
+**NFSv3 file sharing for ESP32 and Raspberry Pi Pico W.** Share SD cards, internal Flash, RAM and firmware assets over Wi-Fi through a common storage interface.
 
 [简体中文](README.zh-CN.md) · [Getting started](docs/getting-started.md) · [Storage integration](docs/storage.md) · [API guide](docs/api.md)
 
@@ -22,7 +22,7 @@
 
 1. Install **esp32 by Espressif Systems** through Arduino Boards Manager.
 2. Install **SdFat 2.3.0** through Arduino Library Manager.
-3. Download **ESP32NFS-1.0.0.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
+3. Download **ESP32NFS-1.1.0.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
 4. Choose **Sketch → Include Library → Add .ZIP Library** and select the archive.
 5. Open **File → Examples → ESP32NFS → LittleFSShare**.
 
@@ -30,7 +30,7 @@ ESP32NFS uses the Arduino library format. Arduino CLI also supports ZIP installa
 
 ```sh
 arduino-cli lib install 'SdFat@2.3.0'
-ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.0.0.zip
+ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.1.0.zip
 ```
 
 ## Share a filesystem
@@ -45,8 +45,8 @@ The application connects Wi-Fi and mounts LittleFS. ESP32NFS maps the filesystem
 
 using namespace esp32_nfs;
 
-LittleFsStorage storage("/littlefs", "spiffs");
-PathVfs filesystem(storage);
+LittleFsStorage flashStorage("/littlefs", "spiffs");
+PathVfs filesystem(flashStorage);
 SocketTransport transport;
 esp32_nfs::Server nfs(filesystem);
 
@@ -96,6 +96,10 @@ esp32_nfs::Server nfs(exports);
 
 Clients mount `ESP32_IP:/sd`, `ESP32_IP:/flash`, `ESP32_IP:/ram` or `ESP32_IP:/rom` directly. The [MappedVolumes example](examples/MappedVolumes/MappedVolumes.ino) combines two SD partitions with RAM and ROM exports.
 
+## Platforms
+
+CI covers ESP32, S2, S3, C2, C3, C5, C6, C61, H2 and P4, plus Pico W and Pico 2 W. See the [platform matrix](docs/platforms.md) for each build route and its examples.
+
 ## Examples
 
 | Example | Application |
@@ -104,6 +108,8 @@ Clients mount `ESP32_IP:/sd`, `ESP32_IP:/flash`, `ESP32_IP:/ram` or `ESP32_IP:/r
 | [SdCardShare](examples/SdCardShare) | Share a FAT32 or exFAT SD card |
 | [MappedVolumes](examples/MappedVolumes) | Export two SD partitions, RAM and ROM |
 | [MemoryShares](examples/MemoryShares) | Publish RAM storage and firmware assets |
+| [PicoWShare](examples/PicoWShare) | Pico Wi-Fi sharing of RAM, ROM and LittleFS assets |
+| [PicoSdCardShare](examples/PicoSdCardShare) | Pico Wi-Fi sharing of FAT32 and exFAT SD cards |
 
 ## Documentation
 

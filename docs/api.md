@@ -1,5 +1,7 @@
 # API guide
 
+`SocketTransport` provides ESP32/ESP-IDF TCP sockets; `PicoWiFiTransport` provides Arduino-Pico Wi-Fi TCP connections. Both implement `Transport`.
+
 All library types live in `esp32_nfs`. Include `ESP32NFS.h` and the headers for your chosen storage and transport.
 
 ## Server lifecycle

@@ -13,8 +13,8 @@ using namespace esp32_nfs;
 #define NFS_EXAMPLE_PASSWORD "YOUR_WIFI_PASSWORD"
 #endif
 constexpr bool FormatOnMountFailure = false; // Set true to initialize a new filesystem.
-LittleFsStorage storage("/littlefs", "spiffs");
-PathVfs vfs(storage);
+LittleFsStorage flashStorage("/littlefs", "spiffs");
+PathVfs vfs(flashStorage);
 SocketTransport network;
 esp32_nfs::Server nfs(vfs);
 void setup() {
