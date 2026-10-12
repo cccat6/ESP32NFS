@@ -26,7 +26,8 @@ public:
     uint64_t mergedBytes = 0;
   } metrics;
   explicit LittleFsStorage(const char *mountPath, const char *partitionLabel = nullptr,
-                           size_t smallWriteCache = 8192) {
+                           size_t smallWriteCache = 8192, Memory &memory = defaultMemory())
+      : memory_(memory) {
     if (smallWriteCache >= 512 && smallWriteCache <= 16384 &&
         !(smallWriteCache & (smallWriteCache - 1)))
       cacheCapacity_ = smallWriteCache;
@@ -60,9 +61,13 @@ public:
     return INT32_MAX;
   }
   void invalidateCaches() override {
-    closeFile();
+    releaseResources();
+  }
+  Status releaseResources() override {
+    Status s = closeFile();
     closeDirectory();
     rootValid_ = statValid_ = false;
+    return s;
   }
   Status stat(const char *p, Attr &a) override {
     if (poison_)
@@ -186,7 +191,7 @@ private:
         end = off + n;
       }
       if (!writeCache_)
-        writeCache_ = new (std::nothrow) uint8_t[cacheCapacity_];
+        writeCache_ = static_cast<uint8_t *>(memory_.allocate(cacheCapacity_));
       if (!writeCache_)
         return Jukebox;
       memcpy(writeCache_ + cacheUsed_, data, n);
@@ -379,6 +384,7 @@ public:
 
 private:
   char label_[17] = {};
+  Memory &memory_;
   char base_[128] = {}, filePath_[PathSize] = {}, directoryPath_[PathSize] = {},
        lastName_[PathSize] = {};
   int fd_ = -1;
@@ -586,7 +592,7 @@ private:
       fd_ = -1;
     }
     filePath_[0] = 0;
-    delete[] writeCache_;
+    memory_.release(writeCache_, cacheCapacity_);
     writeCache_ = nullptr;
     patchCount_ = cacheUsed_ = 0;
     backingDirty_ = dirty_ = false;

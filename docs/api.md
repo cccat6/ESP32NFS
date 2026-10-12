@@ -50,16 +50,7 @@ Stop the server before changing the physical media or remounting a filesystem. R
 | `recordTimeoutMs` | RPC record processing deadline |
 | `replayWindowMs` | Duplicate-request retention window |
 
-## Compile-time sizing
-
-| Definition | Default | Resource |
-|---|---:|---|
-| `ESP32_NFS_BLOCK_SIZE` | 4096 | Maximum NFS data payload |
-| `ESP32_NFS_HANDLE_COUNT` | 16 | Path identity pool |
-| `ESP32_NFS_CONNECTION_COUNT` | 2 | TCP connection slots |
-| `ESP32_NFS_REPLAY_COUNT` | 4 | Mutation replay records |
-
-Apply definitions consistently to the sketch and library translation units. The [performance guide](performance.md) shows transfer and scheduling configurations.
+The default service provides two TCP slots, four export mappings and four mutation-replay records. Payload size, bandwidth, polling work and memory budgets use runtime configuration. The [performance guide](performance.md) describes these settings.
 
 ## Shared resources
 
@@ -68,3 +59,23 @@ Implement `Lease::acquire()` and `Lease::release()` to coordinate access to a sh
 ## Metrics
 
 `nfs.metrics()` reports received/sent bytes, processed requests, replay hits, rejected connections, timeouts and owned heap usage. Applications can use these counters to choose polling budgets and monitor their service.
+
+## Runtime memory and lifecycle
+
+`Memory` owns the allocation budget shared by default across NFS work buffers, path identities, LittleFS write caches and EXCLUSIVE verifier pages. Its defaults are a 128KiB charged-allocation budget and a 32KiB free-heap reserve check. These are adjustable runtime policy values. `MemoryLimits` applies immediately when `configure()` succeeds; rejection preserves the prior limits. `getLimits()` returns the applied policy. Configuration and allocation admission use a nonblocking guard, and allocation counters are atomic.
+
+```cpp
+MemoryLimits limits;
+limits.maxBytes = 192 * 1024;
+limits.reserveBytes = 32 * 1024;
+bool applied = defaultMemory().configure(limits);
+MemoryStats memory = defaultMemory().stats();
+```
+
+A caller-owned `Memory` can select another allocator and can be shared explicitly by `PathVfs::Registry`, `Server`, `SdFatStorage` and `LittleFsStorage`. Keep it alive for all its consumers. Individual filesystem and server operations remain serialized by their owner and volume/bus leases.
+
+`MemoryStats` reports charged bytes, peak bytes, allocation count, allocation failures and the last resource error: budget, reserve, allocator failure, invalid request or temporary admission contention. Charging includes a 16-byte bookkeeping allowance per allocation. `Jukebox` is the NFS retry result for allocation pressure. Transport workspace failures also update `Server::lastStatus()` and `metrics().memoryFailures`.
+
+`Server::stop()` returns a `Status`, closes network activity, releases protocol buffers, and ends export sessions under their leases. A busy lease returns `Jukebox`; retry `stop()` after the owner releases it. Synchronization errors are reported as errors. `PathVfs::endSession()` releases its identities, while `releaseCaches()` frees backend caches and preserves live identities. `Server::unmount(path)` removes one export under the same lease. Start a new session with `begin()` and a fresh epoch. The application owns its RAM file data and physical volume mount lifecycle.
+
+`Config::blockSize` selects payloads from 512 through 32768 bytes at runtime. The default is 4096. Request/reply buffers grow with this value; `Server::activeWorkspaceBytes(payload)` reports their payload accounting. Default polling allows 8192 network bytes and up to 16 directory entries per RPC, bounded further by the client's reply size. `bytesPerSecond=0` uses the available link capacity; a positive value enables the runtime bandwidth policy.

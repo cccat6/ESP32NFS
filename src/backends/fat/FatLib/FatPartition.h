@@ -145,10 +145,6 @@ class FatPartition {
   bool isBusy() { return m_blockDev->isBusy(); }
   //----------------------------------------------------------------------------
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
-  bool dmpDirSector(print_t* pr, uint32_t sector);
-  void dmpFat(print_t* pr, uint32_t start, uint32_t count);
-  bool dmpRootDir(print_t* pr, uint32_t n = 0);
-  void dmpSector(print_t* pr, uint32_t sector, uint8_t bits = 8);
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
   //----------------------------------------------------------------------------
  private:

@@ -34,7 +34,6 @@ namespace esp32_nfs { namespace fat {
  */
 } } // namespace esp32_nfs::fat
 #include "FsFile.h"
-#include "FsFormatter.h"
 #include "FsVolume.h"
 namespace esp32_nfs { namespace fat {
 #endif  // ESP32NFS_PRIVATE_FsLib_h

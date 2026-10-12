@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatFile.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -35,7 +38,7 @@ namespace esp32_nfs { namespace fat {
 namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
 // Add a cluster to a file.
-bool FatFile::addCluster() {
+inline bool FatFile::addCluster() {
 #if USE_FAT_FILE_FLAG_CONTIGUOUS
   uint32_t cc = m_curCluster;
   if (!m_vol->allocateCluster(m_curCluster, &m_curCluster)) {
@@ -60,7 +63,7 @@ fail:
 //------------------------------------------------------------------------------
 // Add a cluster to a directory file and zero the cluster.
 // Return with first sector of cluster in the cache.
-bool FatFile::addDirCluster() {
+inline bool FatFile::addDirCluster() {
   uint32_t sector;
   uint8_t* pc;
 
@@ -94,7 +97,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::attrib(uint8_t bits) {
+inline bool FatFile::attrib(uint8_t bits) {
   if (!isFileOrSubDir() || (bits & FS_ATTRIB_USER_SETTABLE) != bits) {
     DBG_FAIL_MACRO;
     goto fail;
@@ -119,7 +122,7 @@ fail:
 //------------------------------------------------------------------------------
 // cache a file's directory entry
 // return pointer to cached entry or null for failure
-DirFat_t* FatFile::cacheDirEntry(uint8_t action) {
+inline DirFat_t* FatFile::cacheDirEntry(uint8_t action) {
   uint8_t* pc = m_vol->dataCachePrepare(m_dirSector, action);
   DirFat_t* dir = reinterpret_cast<DirFat_t*>(pc);
   if (!dir) {
@@ -132,14 +135,14 @@ fail:
   return nullptr;
 }
 //------------------------------------------------------------------------------
-bool FatFile::close() {
+inline bool FatFile::close() {
   bool rtn = sync();
   m_attributes = FILE_ATTR_CLOSED;
   m_flags = 0;
   return rtn;
 }
 //------------------------------------------------------------------------------
-bool FatFile::contiguousRange(uint32_t* bgnSector, uint32_t* endSector) {
+inline bool FatFile::contiguousRange(uint32_t* bgnSector, uint32_t* endSector) {
   // error if no clusters
   if (!isFile() || m_firstCluster == 0) {
     DBG_FAIL_MACRO;
@@ -177,7 +180,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::createContiguous(const char* path, uint32_t size) {
+inline bool FatFile::createContiguous(const char* path, uint32_t size) {
   if (!open(FatVolume::cwv(), path, O_CREAT | O_EXCL | O_RDWR)) {
     DBG_FAIL_MACRO;
     goto fail;
@@ -190,7 +193,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::createContiguous(FatFile* dirFile, const char* path,
+inline bool FatFile::createContiguous(FatFile* dirFile, const char* path,
                                uint32_t size) {
   if (!open(dirFile, path, O_CREAT | O_EXCL | O_RDWR)) {
     DBG_FAIL_MACRO;
@@ -204,7 +207,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::dirEntry(DirFat_t* dst) {
+inline bool FatFile::dirEntry(DirFat_t* dst) {
   const DirFat_t* dir;
   // Make sure fields on device are correct.
   if (!sync()) {
@@ -225,7 +228,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-uint32_t FatFile::dirSize() {
+inline uint32_t FatFile::dirSize() {
   int8_t fg;
   if (!isDir()) {
     return 0;
@@ -245,7 +248,7 @@ uint32_t FatFile::dirSize() {
   return 512UL * n;
 }
 //------------------------------------------------------------------------------
-int FatFile::fgets(char* str, int num, const char* delim) {
+inline int FatFile::fgets(char* str, int num, const char* delim) {
   char ch;
   int n = 0;
   int r = -1;
@@ -273,21 +276,21 @@ int FatFile::fgets(char* str, int num, const char* delim) {
   return n;
 }
 //------------------------------------------------------------------------------
-void FatFile::fgetpos(fspos_t* pos) const {
+inline void FatFile::fgetpos(fspos_t* pos) const {
   pos->position = m_curPosition;
   pos->cluster = m_curCluster;
 }
 //------------------------------------------------------------------------------
-uint32_t FatFile::firstSector() const {
+inline uint32_t FatFile::firstSector() const {
   return m_firstCluster ? m_vol->clusterStartSector(m_firstCluster) : 0;
 }
 //------------------------------------------------------------------------------
-void FatFile::fsetpos(const fspos_t* pos) {
+inline void FatFile::fsetpos(const fspos_t* pos) {
   m_curPosition = pos->position;
   m_curCluster = pos->cluster;
 }
 //------------------------------------------------------------------------------
-bool FatFile::getAccessDate(uint16_t* pdate) {
+inline bool FatFile::getAccessDate(uint16_t* pdate) {
   DirFat_t dir;
   if (!dirEntry(&dir)) {
     DBG_FAIL_MACRO;
@@ -300,7 +303,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::getCreateDateTime(uint16_t* pdate, uint16_t* ptime) {
+inline bool FatFile::getCreateDateTime(uint16_t* pdate, uint16_t* ptime) {
   DirFat_t dir;
   if (!dirEntry(&dir)) {
     DBG_FAIL_MACRO;
@@ -314,7 +317,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) {
+inline bool FatFile::getModifyDateTime(uint16_t* pdate, uint16_t* ptime) {
   DirFat_t dir;
   if (!dirEntry(&dir)) {
     DBG_FAIL_MACRO;
@@ -328,9 +331,9 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::isBusy() { return m_vol->isBusy(); }
+inline bool FatFile::isBusy() { return m_vol->isBusy(); }
 //------------------------------------------------------------------------------
-bool FatFile::mkdir(FatFile* parent, const char* path, bool pFlag) {
+inline bool FatFile::mkdir(FatFile* parent, const char* path, bool pFlag) {
   FatName_t fname;
   FatFile tmpDir;
 
@@ -372,7 +375,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::mkdir(FatFile* parent, FatName_t* fname) {
+inline bool FatFile::mkdir(FatFile* parent, FatName_t* fname) {
   uint32_t sector;
   DirFat_t dot;
   DirFat_t* dir;
@@ -443,15 +446,15 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(const char* path, oflag_t oflag) {
+inline bool FatFile::open(const char* path, oflag_t oflag) {
   return open(FatVolume::cwv(), path, oflag);
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(FatVolume* vol, const char* path, oflag_t oflag) {
+inline bool FatFile::open(FatVolume* vol, const char* path, oflag_t oflag) {
   return vol && open(vol->vwd(), path, oflag);
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(FatFile* dirFile, const char* path, oflag_t oflag) {
+inline bool FatFile::open(FatFile* dirFile, const char* path, oflag_t oflag) {
   FatFile tmpDir;
   FatName_t fname;
 
@@ -495,12 +498,12 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(uint16_t index, oflag_t oflag) {
+inline bool FatFile::open(uint16_t index, oflag_t oflag) {
   FatVolume* vol = FatVolume::cwv();
   return vol ? open(vol->vwd(), index, oflag) : false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(FatFile* dirFile, uint16_t index, oflag_t oflag) {
+inline bool FatFile::open(FatFile* dirFile, uint16_t index, oflag_t oflag) {
   if (index) {
     // Find start of LFN.
     const DirLfn_t* ldir;
@@ -541,7 +544,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // open a cached directory entry.
-bool FatFile::openCachedEntry(FatFile* dirFile, uint16_t dirIndex,
+inline bool FatFile::openCachedEntry(FatFile* dirFile, uint16_t dirIndex,
                               oflag_t oflag, uint8_t lfnOrd) {
   uint32_t firstCluster;
   memset(this, 0, sizeof(FatFile));
@@ -623,7 +626,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openCluster(FatFile* file) {
+inline bool FatFile::openCluster(FatFile* file) {
   if (file->m_dirCluster == 0) {
     return openRoot(file->m_vol);
   }
@@ -635,7 +638,7 @@ bool FatFile::openCluster(FatFile* file) {
   return true;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openCwd() {
+inline bool FatFile::openCwd() {
   if (isOpen() || !FatVolume::cwv()) {
     DBG_FAIL_MACRO;
     goto fail;
@@ -648,7 +651,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openNext(FatFile* dirFile, oflag_t oflag) {
+inline bool FatFile::openNext(FatFile* dirFile, oflag_t oflag) {
   uint8_t checksum = 0;
   const DirLfn_t* ldir;
   uint8_t lfnOrd = 0;
@@ -702,7 +705,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openRoot(FatVolume* vol) {
+inline bool FatFile::openRoot(FatVolume* vol) {
   // error if file is already open
   if (isOpen()) {
     DBG_FAIL_MACRO;
@@ -735,7 +738,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-int FatFile::peek() {
+inline int FatFile::peek() {
   uint32_t saveCurPosition = m_curPosition;
   uint32_t saveCurCluster = m_curCluster;
   int c = read();
@@ -744,7 +747,7 @@ int FatFile::peek() {
   return c;
 }
 //------------------------------------------------------------------------------
-bool FatFile::preAllocate(uint32_t length) {
+inline bool FatFile::preAllocate(uint32_t length) {
   uint32_t need;
   if (!length || !isWritable() || m_firstCluster) {
     DBG_FAIL_MACRO;
@@ -771,7 +774,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-int FatFile::read(void* buf, size_t nbyte) {
+inline int FatFile::read(void* buf, size_t nbyte) {
   int8_t fg;
   uint8_t sectorOfCluster = 0;
   uint8_t* dst = reinterpret_cast<uint8_t*>(buf);
@@ -882,7 +885,7 @@ fail:
   return -1;
 }
 //------------------------------------------------------------------------------
-int8_t FatFile::readDir(DirFat_t* dir) {
+inline int8_t FatFile::readDir(DirFat_t* dir) {
   // if not a directory file or miss-positioned return an error
   if (!isDir() || (0X1F & m_curPosition)) {
     return -1;
@@ -910,7 +913,7 @@ int8_t FatFile::readDir(DirFat_t* dir) {
 //------------------------------------------------------------------------------
 // Read next directory entry into the cache.
 // Assumes file is correctly positioned.
-DirFat_t* FatFile::readDirCache(bool skipReadOk) {
+inline DirFat_t* FatFile::readDirCache(bool skipReadOk) {
   DBG_HALT_IF(m_curPosition & 0X1F);
   uint8_t i = (m_curPosition >> 5) & 0XF;
 
@@ -933,7 +936,7 @@ fail:
   return nullptr;
 }
 //------------------------------------------------------------------------------
-bool FatFile::remove(const char* path) {
+inline bool FatFile::remove(const char* path) {
   FatFile file;
   if (!file.open(this, path, O_WRONLY)) {
     DBG_FAIL_MACRO;
@@ -945,11 +948,11 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::rename(const char* newPath) {
+inline bool FatFile::rename(const char* newPath) {
   return rename(m_vol->vwd(), newPath);
 }
 //------------------------------------------------------------------------------
-bool FatFile::rename(FatFile* dirFile, const char* newPath) {
+inline bool FatFile::rename(FatFile* dirFile, const char* newPath) {
   DirFat_t entry;
   uint32_t dirCluster = 0;
   FatFile file;
@@ -1059,7 +1062,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::rmdir() {
+inline bool FatFile::rmdir() {
   // must be open subdirectory
   if (!isSubDir() || (!1 && isLFN())) {
     DBG_FAIL_MACRO;
@@ -1101,7 +1104,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::rmRfStar() {
+inline bool FatFile::rmRfStar() {
   uint16_t index;
   FatFile f;
   if (!isDir()) {
@@ -1176,7 +1179,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::seekSet(uint32_t pos) {
+inline bool FatFile::seekSet(uint32_t pos) {
   uint32_t nCur;
   uint32_t nNew;
   uint32_t tmp = m_curCluster;
@@ -1241,7 +1244,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::sync() {
+inline bool FatFile::sync() {
   uint16_t date, time;
   uint8_t ms10;
   if (!isOpen()) {
@@ -1283,7 +1286,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::timestamp(uint8_t flags, uint16_t year, uint8_t month,
+inline bool FatFile::timestamp(uint8_t flags, uint16_t year, uint8_t month,
                         uint8_t day, uint8_t hour, uint8_t minute,
                         uint8_t second) {
   uint16_t dirDate;
@@ -1327,7 +1330,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::truncate() {
+inline bool FatFile::truncate() {
   uint32_t toFree;
   // error if not a normal file or read-only
   if (!isWritable()) {
@@ -1371,7 +1374,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::write(const void* buf, size_t nbyte) {
+inline size_t FatFile::write(const void* buf, size_t nbyte) {
   // convert void* to uint8_t*  -  must be before goto statements
   const uint8_t* src = reinterpret_cast<const uint8_t*>(buf);
   uint8_t* pc;
@@ -1517,3 +1520,5 @@ fail:
   return 0;
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

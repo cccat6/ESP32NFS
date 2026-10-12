@@ -15,7 +15,7 @@ Use a finite `bytesPerSecond` to allocate a predictable share of network bandwid
 
 ## Transfer sizes and client concurrency
 
-The default maximum payload is 4KiB. A throughput-oriented build can set `ESP32_NFS_BLOCK_SIZE=16384` consistently across the sketch and library, then use a 32KiB poll byte budget. Configure the client for matching read/write sizes and pipelined requests.
+The default payload is 4KiB. Set `config.blockSize = 16384` and `config.ioBytesPerPoll = 32768` to use a 16KiB payload at runtime. Size the shared `Memory` budget for the selected transfer size and namespace workload. Configure the client for matching read/write sizes and pipelined requests.
 
 Larger payloads amortize RPC processing and round-trip time. Choose the request depth together with TCP buffer sizes and the number of connections. Request/reply memory scales with the maximum payload.
 
@@ -44,3 +44,11 @@ Budget these buffers together with filesystem caches, request buffers and applic
 Use larger sequential operations and batches where the application's data model allows. LittleFS's small-write cache combines scattered updates; COMMIT supplies a checked synchronization point. FILE_SYNC provides a persistence boundary for each request.
 
 FAT/exFAT directory cursors and retained read descriptors reduce repeated filesystem work. Size the path-identity pool for the exported namespace. Coordinate SPI transfers with the application lease so other peripherals receive their scheduled bus access.
+
+## Large directories
+
+Path identities use hash indexes by ID and by parent/name. Nodes store each filename once and refer to their parent by stable ID. Directory renames update the moved node and retain descendant IDs. Directory reads advance with cookies and bounded batches. Reopening a backend cursor preserves identities; interrupted seeks return `Jukebox` so the client can resume the same cookie.
+
+Identity storage grows on demand within the shared memory budget. Deleted entries are reclaimed immediately, sparse index tables shrink, and ending a session releases its entire index. Live identities remain valid for the session. Runtime budget exhaustion returns a retry error before a CREATE or RENAME changes the filesystem. CI exercises 1100-file FAT32/exFAT directories, earlier handles after a full scan, alias equivalence, directory renames, concurrent budget accounting, allocation failures and repeated stop/start.
+
+Optional filesystem and block adapters are supplied as inline implementation headers. Selecting the public adapter header includes its implementation; RAM/ROM applications compile the protocol core without the FAT, path or block backends. The CI inspects both compilation output and ELF symbols for this separation.

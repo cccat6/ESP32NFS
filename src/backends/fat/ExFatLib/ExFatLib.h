@@ -29,7 +29,6 @@ namespace esp32_nfs { namespace fat {
 #ifndef ESP32NFS_PRIVATE_ExFatLib_h
 #define ESP32NFS_PRIVATE_ExFatLib_h
 } } // namespace esp32_nfs::fat
-#include "ExFatFormatter.h"
 #include "ExFatVolume.h"
 namespace esp32_nfs { namespace fat {
 #endif  // ESP32NFS_PRIVATE_ExFatLib_h

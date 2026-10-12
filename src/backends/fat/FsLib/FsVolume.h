@@ -100,7 +100,7 @@ class FsVolume {
     return m_fVol ? m_fVol->chdir(path) : m_xVol ? m_xVol->chdir(path) : false;
   }
   /** Change global working volume to this volume. */
-  void chvol() { m_cwv = this; }
+  void chvol() { currentVolume() = this; }
   /** \return The total number of clusters in the volume. */
   uint32_t clusterCount() const {
     return m_fVol   ? m_fVol->clusterCount()
@@ -117,6 +117,9 @@ class FsVolume {
    * \return pointer to sector size buffer for format.
    */
   uint8_t* end() {
+    if (m_fVol) m_fVol->~FatVolume();
+    if (m_xVol) m_xVol->~ExFatVolume();
+    if (currentVolume() == this) currentVolume() = nullptr;
     m_fVol = nullptr;
     m_xVol = nullptr;
     static_assert(sizeof(m_volMem) >= 512, "m_volMem too small");
@@ -395,11 +398,11 @@ class FsVolume {
  private:
   /** FsBaseFile allowed access to private members. */
   friend class FsBaseFile;
-  static FsVolume* cwv() { return m_cwv; }
+  static FsVolume* cwv() { return currentVolume(); }
   FsVolume(const FsVolume& from);
   FsVolume& operator=(const FsVolume& from);
 
-  static FsVolume* m_cwv;
+  static FsVolume*& currentVolume() { static FsVolume* value = nullptr; return value; }
   FatVolume* m_fVol = nullptr;
   ExFatVolume* m_xVol = nullptr;
 };

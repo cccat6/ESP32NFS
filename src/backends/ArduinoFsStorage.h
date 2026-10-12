@@ -153,8 +153,10 @@ public:
   Status rename(const char *, const char *) override {
     return ReadOnly;
   }
-  void setDirectoryScanBudget(uint32_t count) {
+  Status setDirectoryScanBudget(uint32_t count) {
+    if (!count) return Invalid;
     scanBudget_ = count;
+    return Ok;
   }
 
 private:

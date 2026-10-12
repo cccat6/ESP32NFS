@@ -48,6 +48,7 @@ struct Result {
 class BlockDevice {
 public:
   virtual ~BlockDevice() {}
+  // Cached metadata only. Physical probing/preparation is an explicit driver operation.
   virtual Geometry geometry() const = 0;
   // Busy means no admission. Pending means admitted exactly once; poll/cancel only until terminal.
   // Buffers are borrowed through terminal completion/cancel. cancel synchronously detaches
@@ -159,3 +160,5 @@ private:
 };
 } // namespace storage
 } // namespace esp32_nfs
+
+#include "BlockDevice.ipp"

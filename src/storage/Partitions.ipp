@@ -1,16 +1,17 @@
+#pragma once
 // SPDX-License-Identifier: MIT
 #include "Partitions.h"
 #include <string.h>
 namespace esp32_nfs {
 namespace storage {
-namespace {
-uint32_t u32(const uint8_t *p) {
+namespace partition_detail {
+inline uint32_t u32(const uint8_t *p) {
   return uint32_t(p[0]) | uint32_t(p[1]) << 8 | uint32_t(p[2]) << 16 | uint32_t(p[3]) << 24;
 }
-uint64_t u64(const uint8_t *p) {
+inline uint64_t u64(const uint8_t *p) {
   return uint64_t(u32(p)) | uint64_t(u32(p + 4)) << 32;
 }
-uint32_t crc(const uint8_t *p, size_t n, uint32_t state = 0xffffffff) {
+inline uint32_t crc(const uint8_t *p, size_t n, uint32_t state = 0xffffffff) {
   while (n--) {
     state ^= *p++;
     for (unsigned i = 0; i < 8; ++i)
@@ -18,14 +19,14 @@ uint32_t crc(const uint8_t *p, size_t n, uint32_t state = 0xffffffff) {
   }
   return state;
 }
-bool overlap(const PartitionInfo *out, size_t n, uint64_t start, uint64_t count) {
+inline bool overlap(const PartitionInfo *out, size_t n, uint64_t start, uint64_t count) {
   for (size_t i = 0; i < n; ++i)
     if (start < out[i].first + out[i].blocks && out[i].first < start + count)
       return true;
   return false;
 }
 } // namespace
-Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &count, uint8_t *b,
+inline Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &count, uint8_t *b,
                          size_t bytes, uint32_t maxEntries) {
   count = 0;
   auto g = io.geometry();
@@ -49,12 +50,12 @@ Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &co
     for (unsigned i = 0; i < 4; ++i) {
       const uint8_t *p = b + 446 + i * 16;
       uint8_t type = p[4];
-      uint64_t first = u32(p + 8), n = u32(p + 12);
+      uint64_t first = partition_detail::u32(p + 8), n = partition_detail::u32(p + 12);
       if (!type || !n)
         continue;
       if (type == 5 || type == 15 || type == 0x85)
         return Error::Unsupported; // EBR chains require a separate bounded walker.
-      if (!first || first >= g.blocks || n > g.blocks - first || overlap(out, count, first, n))
+      if (!first || first >= g.blocks || n > g.blocks - first || partition_detail::overlap(out, count, first, n))
         return Error::Invalid;
       if (count == cap)
         return Error::NoSpace;
@@ -71,14 +72,14 @@ Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &co
     return e;
   if (memcmp(b, "EFI PART", 8))
     return Error::Invalid;
-  uint32_t length = u32(b + 12), expected = u32(b + 16);
-  if (length < 92 || length > g.blockBytes || u64(b + 24) != 1 || u64(b + 32) >= g.blocks)
+  uint32_t length = partition_detail::u32(b + 12), expected = partition_detail::u32(b + 16);
+  if (length < 92 || length > g.blockBytes || partition_detail::u64(b + 24) != 1 || partition_detail::u64(b + 32) >= g.blocks)
     return Error::Invalid;
   memset(b + 16, 0, 4);
-  if ((crc(b, length) ^ 0xffffffff) != expected)
+  if ((partition_detail::crc(b, length) ^ 0xffffffff) != expected)
     return Error::Invalid;
-  uint64_t firstUsable = u64(b + 40), lastUsable = u64(b + 48), table = u64(b + 72);
-  uint32_t entries = u32(b + 80), stride = u32(b + 84), tableCrc = u32(b + 88);
+  uint64_t firstUsable = partition_detail::u64(b + 40), lastUsable = partition_detail::u64(b + 48), table = partition_detail::u64(b + 72);
+  uint32_t entries = partition_detail::u32(b + 80), stride = partition_detail::u32(b + 84), tableCrc = partition_detail::u32(b + 88);
   if (!entries || entries > maxEntries || stride < 128 || stride > 512 || (stride & 7) ||
       firstUsable > lastUsable || lastUsable >= g.blocks || table >= g.blocks)
     return Error::Unsupported;
@@ -94,7 +95,7 @@ Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &co
     size_t n = size_t(tableBytes - sector * g.blockBytes);
     if (n > g.blockBytes)
       n = g.blockBytes;
-    checksum = crc(b, n, checksum);
+    checksum = partition_detail::crc(b, n, checksum);
   }
   if ((checksum ^ 0xffffffff) != tableCrc)
     return Error::Invalid;
@@ -122,9 +123,9 @@ Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &co
       empty &= record[j] == 0;
     if (empty)
       continue;
-    uint64_t start = u64(record + 32), last = u64(record + 40);
+    uint64_t start = partition_detail::u64(record + 32), last = partition_detail::u64(record + 40);
     if (start < firstUsable || last > lastUsable || start > last ||
-        overlap(out, count, start, last - start + 1))
+        partition_detail::overlap(out, count, start, last - start + 1))
       return Error::Invalid;
     if (count == cap)
       return Error::NoSpace;
@@ -132,7 +133,7 @@ Error discoverPartitions(BlockIo &io, PartitionInfo *out, size_t cap, size_t &co
     out[count].first = start;
     out[count].blocks = last - start + 1;
     memcpy(out[count].guid, record, 16);
-    out[count].readOnly = (u64(record + 48) & (uint64_t(1) << 60)) != 0;
+    out[count].readOnly = (partition_detail::u64(record + 48) & (uint64_t(1) << 60)) != 0;
     ++count;
   }
   return Error::Ok;

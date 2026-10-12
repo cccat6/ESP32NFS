@@ -6,10 +6,10 @@ namespace esp32_nfs {
 // Transaction-protected EXCLUSIVE CREATE verifiers. No permissions, owners or timestamp database.
 class SdFatVerifiers {
 public:
-  static constexpr uint32_t MaxRecords = 64;
-  explicit SdFatVerifiers(SdFatVolume &volume) : volume_(volume) {}
+  explicit SdFatVerifiers(SdFatVolume &volume, Memory &memory = defaultMemory())
+      : volume_(volume), memory_(memory) {}
   ~SdFatVerifiers() {
-    delete[] index_;
+    release();
   }
   SdFatVerifiers(const SdFatVerifiers &) = delete;
   SdFatVerifiers &operator=(const SdFatVerifiers &) = delete;
@@ -18,7 +18,8 @@ public:
     uint64_t verifier = 0;
     uint32_t flags = 0;
   };
-  bool load();
+  Status load();
+  void release();
   void invalidate() {
     loaded_ = false;
   }
@@ -32,13 +33,17 @@ public:
 
 private:
   SdFatVolume &volume_;
+  Memory &memory_;
   bool loaded_ = false;
-  uint32_t count_ = 0;
-  struct Index {
-    uint64_t key = 0;
-    uint32_t slot = 0;
+  uint32_t count_ = 0, capacity_ = 0;
+  struct Page {
+    Page *next;
+    uint64_t keys[64];
   };
-  Index *index_ = nullptr;
+  Page *pages_ = nullptr, *tail_ = nullptr, *cursor_ = nullptr;
+  uint32_t cursorFirst_ = 0;
+  uint64_t &slotKey(uint32_t slot);
+  Status reserve(uint32_t count);
   bool readSlot(uint32_t, Record &);
   bool writeSlot(uint32_t, const Record &);
   bool header();
@@ -47,3 +52,5 @@ private:
   static bool below(const char *, const char *);
 };
 } // namespace esp32_nfs
+
+#include "SdFatVerifiers.ipp"

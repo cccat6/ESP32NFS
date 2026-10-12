@@ -38,6 +38,7 @@ namespace esp32_nfs { namespace fat {
  */
 class ExFatVolume : public ExFatPartition {
  public:
+  ~ExFatVolume() { if (currentVolume() == this) currentVolume() = nullptr; }
   ExFatVolume() {}
   /** Get file's user settable attributes.
    * \param[in] path path to file.
@@ -74,8 +75,8 @@ class ExFatVolume : public ExFatPartition {
     if (!chdir()) {
       return false;
     }
-    if (setCwv || !m_cwv) {
-      m_cwv = this;
+    if (setCwv || !currentVolume()) {
+      currentVolume() = this;
     }
     return true;
   }
@@ -95,7 +96,7 @@ class ExFatVolume : public ExFatPartition {
   bool chdir(const char* path);
 
   /** Change global working volume to this volume. */
-  void chvol() { m_cwv = this; }
+  void chvol() { currentVolume() = this; }
 
   /**
    * Test for the existence of a file.
@@ -341,9 +342,9 @@ class ExFatVolume : public ExFatPartition {
 
  private:
   friend ExFatFile;
-  static ExFatVolume* cwv() { return m_cwv; }
+  static ExFatVolume* cwv() { return currentVolume(); }
   ExFatFile* vwd() { return &m_vwd; }
-  static ExFatVolume* m_cwv;
+  static ExFatVolume*& currentVolume() { static ExFatVolume* value = nullptr; return value; }
   ExFatFile m_vwd;
 };
 #endif  // ESP32NFS_PRIVATE_ExFatVolume_h

@@ -14,3 +14,5 @@ Error discoverPartitions(BlockIo &, PartitionInfo *out, size_t capacity, size_t 
                          uint8_t *scratch, size_t bytes, uint32_t maxGptEntries = 128);
 } // namespace storage
 } // namespace esp32_nfs
+
+#include "Partitions.ipp"

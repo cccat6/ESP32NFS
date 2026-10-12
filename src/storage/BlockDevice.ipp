@@ -1,13 +1,14 @@
+#pragma once
 // SPDX-License-Identifier: MIT
 #include "BlockDevice.h"
 #include <string.h>
 namespace esp32_nfs {
 namespace storage {
-uint64_t nextMountGeneration() {
+inline uint64_t nextMountGeneration() {
   static uint64_t value = 0;
   return value == UINT64_MAX ? 0 : ++value;
 }
-Result BlockIo::execute(Request r) {
+inline Result BlockIo::execute(Request r) {
   Geometry g = device_.geometry();
   if (!g.generation || !g.blocks || !g.blockBytes || g.blockBytes > 65536 ||
       (g.blockBytes & (g.blockBytes - 1)))
@@ -69,7 +70,7 @@ Result BlockIo::execute(Request r) {
     return {Error::Unsupported};
   return result;
 }
-Error BlockIo::read(uint64_t l, uint32_t n, uint8_t *p, size_t b) {
+inline Error BlockIo::read(uint64_t l, uint32_t n, uint8_t *p, size_t b) {
   Request r;
   r.lba = l;
   r.blocks = n;
@@ -78,7 +79,7 @@ Error BlockIo::read(uint64_t l, uint32_t n, uint8_t *p, size_t b) {
   r.generation = geometry().generation;
   return execute(r).error;
 }
-Error BlockIo::write(uint64_t l, uint32_t n, const uint8_t *p, size_t b) {
+inline Error BlockIo::write(uint64_t l, uint32_t n, const uint8_t *p, size_t b) {
   Request r;
   r.operation = Operation::Write;
   r.lba = l;
@@ -88,13 +89,13 @@ Error BlockIo::write(uint64_t l, uint32_t n, const uint8_t *p, size_t b) {
   r.generation = geometry().generation;
   return execute(r).error;
 }
-Error BlockIo::flush() {
+inline Error BlockIo::flush() {
   Request r;
   r.operation = Operation::Flush;
   r.generation = geometry().generation;
   return execute(r).error;
 }
-Geometry Partition::geometry() const {
+inline Geometry Partition::geometry() const {
   Geometry g = parent_.geometry();
   if (start_ > g.blocks || count_ > g.blocks - start_) {
     g.blocks = 0;
@@ -105,7 +106,7 @@ Geometry Partition::geometry() const {
   g.writable &= !readOnly_;
   return g;
 }
-Result Partition::start(const Request &request) {
+inline Result Partition::start(const Request &request) {
   Geometry g = geometry();
   if (!g.generation)
     return {Error::Invalid};
@@ -121,9 +122,9 @@ Result Partition::start(const Request &request) {
   }
   return parent_.start(r);
 }
-Geometry MemoryDevice::geometry() const {
+inline Geometry MemoryDevice::geometry() const {
   Geometry g;
-  g.blocks = blockBytes_ ? size_ / blockBytes_ : 0;
+  g.blocks = bytes_ && blockBytes_ ? size_ / blockBytes_ : 0;
   g.blockBytes = blockBytes_;
   g.generation = generation_;
   g.identity = reinterpret_cast<uintptr_t>(bytes_);
@@ -131,7 +132,10 @@ Geometry MemoryDevice::geometry() const {
   g.maxTransferBlocks = 8;
   return g;
 }
-Result MemoryDevice::start(const Request &r) {
+inline Result MemoryDevice::start(const Request &r) {
+  if (r.operation != Operation::Read && r.operation != Operation::Write && r.operation != Operation::Flush)
+    return {Error::Invalid};
+  if (!bytes_) return {Error::NoMedia};
   Geometry g = geometry();
   if (r.generation != g.generation)
     return {Error::Changed};

@@ -11,7 +11,7 @@ public:
   bool valid = true;
   XdrIn(const uint8_t *p, size_t n) : data(p), size(n) {}
   bool take(size_t n) {
-    if (!valid || n > size - pos) {
+    if (!valid || !data || pos > size || n > size - pos) {
       valid = false;
       return false;
     }
@@ -60,6 +60,10 @@ public:
     return fixed(n);
   }
   bool string(char *s, size_t cap) {
+    if (!s || !cap) {
+      valid = false;
+      return false;
+    }
     size_t n;
     const uint8_t *p = opaque(n, cap - 1);
     if (!p)
@@ -83,7 +87,7 @@ public:
   bool valid = true;
   XdrOut(uint8_t *p, size_t n) : data(p), size(n) {}
   void u32(uint32_t v) {
-    if (!valid || size - pos < 4) {
+    if (!valid || !data || pos > size || size - pos < 4) {
       valid = false;
       return;
     }
@@ -104,7 +108,7 @@ public:
       return;
     }
     size_t p = (n + 3) & ~size_t(3);
-    if (!valid || p > size - pos) {
+    if (!valid || pos > size || p > size - pos || (p && !data) || (n && !src)) {
       valid = false;
       return;
     }
@@ -115,10 +119,18 @@ public:
     pos += p;
   }
   void opaque(const void *p, size_t n) {
+    if (n > UINT32_MAX) {
+      valid = false;
+      return;
+    }
     u32(n);
     fixed(p, n);
   }
   void string(const char *s) {
+    if (!s) {
+      valid = false;
+      return;
+    }
     opaque(s, strlen(s));
   }
 };

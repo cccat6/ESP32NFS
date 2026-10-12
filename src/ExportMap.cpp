@@ -3,8 +3,8 @@
 #include "ESP32NFS.h"
 #include <string.h>
 namespace esp32_nfs {
-bool ExportMap::add(const char *p, Vfs &v, bool readOnly, Lease *lease) {
-  if (!p || p[0] != '/' || strlen(p) >= PathCapacity || find(p) || nextToken_ == UINT64_MAX)
+bool ExportMap::validPath(const char *p) {
+  if (!p || p[0] != '/' || strlen(p) >= PathCapacity)
     return false;
   if (strlen(p) > 1 && p[strlen(p) - 1] == '/')
     return false;
@@ -17,6 +17,11 @@ bool ExportMap::add(const char *p, Vfs &v, bool readOnly, Lease *lease) {
       break;
     c = e + 1;
   }
+  return true;
+}
+bool ExportMap::add(const char *p, Vfs &v, bool readOnly, Lease *lease) {
+  if (!validPath(p) || find(p) || nextToken_ == UINT64_MAX)
+    return false;
   for (auto &e : entries_)
     if (e.vfs == &v)
       return false;
@@ -51,38 +56,57 @@ ExportMap::Mapping *ExportMap::find(uint64_t t) {
 ExportMap::Mapping *ExportMap::at(size_t i) {
   return i < ESP32_NFS_EXPORT_COUNT && entries_[i].vfs ? entries_ + i : nullptr;
 }
-bool ExportMap::remove(const char *p) {
+Status ExportMap::release(Mapping &e, Lease *fallback) {
+  Lease *bus = e.lease ? e.lease : fallback;
+  if (bus && !bus->acquire())
+    return Jukebox;
+  Status s = e.vfs->endSession();
+  if (bus)
+    bus->release();
+  e.mounted = false;
+  return s;
+}
+bool ExportMap::remove(const char *p, Lease *fallback) {
   auto *e = find(p);
-  if (!e)
+  if (!e || release(*e, fallback) != Ok)
     return false;
-  e->vfs->endSession();
   *e = Mapping();
   ++revision_;
   return true;
 }
-void ExportMap::clear() {
+Status ExportMap::clear(Lease *fallback) {
+  Status result = Ok;
   for (auto &e : entries_)
     if (e.vfs) {
-      e.vfs->endSession();
-      e = Mapping();
+      Status s = release(e, fallback);
+      if (s == Ok) {
+        e = Mapping();
+        ++revision_;
+      } else
+        result = s;
     }
-  ++revision_;
+  return result;
 }
-void ExportMap::endSessions() {
+Status ExportMap::endSessions(Lease *fallback) {
+  Status result = Ok;
   for (auto &e : entries_)
     if (e.vfs) {
-      e.vfs->endSession();
-      e.mounted = false;
+      Status s = release(e, fallback);
+      if (s != Ok)
+        result = s;
     }
+  return result;
 }
-void ExportMap::refreshGenerations() {
+Status ExportMap::refreshGenerations(Lease *fallback) {
   for (auto &e : entries_)
     if (e.vfs && e.generation != e.vfs->generation()) {
-      e.vfs->endSession();
+      Status s = release(e, fallback);
+      if (s != Ok)
+        return s;
       e.generation = e.vfs->generation();
       e.token = nextToken_ == UINT64_MAX ? 0 : nextToken_++;
-      e.mounted = false;
       ++revision_;
     }
+  return Ok;
 }
 } // namespace esp32_nfs

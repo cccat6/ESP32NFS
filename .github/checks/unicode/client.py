@@ -4,16 +4,16 @@ import socket
 import subprocess
 import sys
 
-for filesystem in ("fat", "exfat"):
+for filesystem, payload in (("fat",4096),("exfat",4096),("fat",16384),("exfat",16384)):
     with socket.socket() as probe:
         probe.bind(("127.0.0.1", 0))
         port = probe.getsockname()[1]
-    server = subprocess.Popen([sys.argv[1], filesystem, str(port)],
+    server = subprocess.Popen([sys.argv[1], filesystem, str(port), str(payload)],
                               stdout=subprocess.PIPE, stderr=subprocess.PIPE, text=True)
     try:
         ready = server.stdout.readline().strip().split()
         assert ready[0] == "READY"
-        subprocess.run([sys.argv[2], str(port), ready[2]], check=True, timeout=60)
+        subprocess.run([sys.argv[2], str(port), ready[2], str(payload)], check=True, timeout=90)
     finally:
         server.terminate()
         _, errors = server.communicate(timeout=15)

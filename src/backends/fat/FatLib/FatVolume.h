@@ -37,6 +37,7 @@ namespace esp32_nfs { namespace fat {
  */
 class FatVolume : public FatPartition {
  public:
+  ~FatVolume() { if (currentVolume() == this) currentVolume() = nullptr; }
   /** Get file's user settable attributes.
    * \param[in] path path to file.
    * \return user settable file attributes for success else -1.
@@ -72,13 +73,13 @@ class FatVolume : public FatPartition {
     if (!chdir()) {
       return false;
     }
-    if (setCwv || !m_cwv) {
-      m_cwv = this;
+    if (setCwv || !currentVolume()) {
+      currentVolume() = this;
     }
     return true;
   }
   /** Change global current working volume to this volume. */
-  void chvol() { m_cwv = this; }
+  void chvol() { currentVolume() = this; }
 
   /**
    * Set volume working directory to root.
@@ -340,9 +341,9 @@ class FatVolume : public FatPartition {
 
  private:
   friend FatFile;
-  static FatVolume* cwv() { return m_cwv; }
+  static FatVolume* cwv() { return currentVolume(); }
   FatFile* vwd() { return &m_vwd; }
-  static FatVolume* m_cwv;
+  static FatVolume*& currentVolume() { static FatVolume* value = nullptr; return value; }
   FatFile m_vwd;
 };
 } } // namespace esp32_nfs::fat

@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "../ESP32NFS.h"
+#include "../Memory.h"
 #include "../Names.h"
 #include <string.h>
 namespace esp32_nfs {
@@ -73,6 +74,10 @@ public:
   }
   // Required before external mutation/remount and when ending a VFS session.
   virtual void invalidateCaches() {}
+  virtual Status releaseResources() {
+    invalidateCaches();
+    return Ok;
+  }
   virtual Status sync(const char *) = 0;
   virtual Status space(Space &) = 0;
   virtual uint64_t maxFileSize() const = 0;
@@ -89,25 +94,38 @@ public:
 class PathVfs : public Vfs {
 private:
   struct Node {
-    const PathVfs *owner = nullptr;
-    uint64_t id = 0, revision = 1, storageId = 0;
-    char path[PathSize] = {};
+    uint64_t id = 0, revision = 1, storageId = 0, parent = 0;
+    Node *byId = nullptr, *byName = nullptr;
+    uint32_t hash = 0;
+    uint16_t nameLength = 0, children = 0;
+    char *name() {
+      return reinterpret_cast<char *>(this + 1);
+    }
+    const char *name() const {
+      return reinterpret_cast<const char *>(this + 1);
+    }
   };
 
 public:
   class Registry {
     friend class PathVfs;
-    Node *nodes_ = nullptr;
+    Memory &memory_;
+    size_t bytes_ = 0, count_ = 0;
+    void *allocate(size_t bytes);
+    void release(void *block, size_t bytes);
 
   public:
-    Registry() = default;
-    ~Registry() {
-      delete[] nodes_;
-    }
+    explicit Registry(Memory &memory = defaultMemory()) : memory_(memory) {}
     Registry(const Registry &) = delete;
     Registry &operator=(const Registry &) = delete;
     size_t allocatedBytes() const {
-      return nodes_ ? sizeof(Node) * ESP32_NFS_HANDLE_COUNT : 0;
+      return bytes_;
+    }
+    size_t identities() const {
+      return count_;
+    }
+    Memory &memory() {
+      return memory_;
     }
   };
 
@@ -119,8 +137,10 @@ public:
   // External namespace changes/remounts require invalidateAll before access resumes.
   // notifyDirectoryChanged refreshes cookies/caches while existing paths remain valid.
   void invalidateAll();
-  void endSession() override {
-    invalidateAll();
+  Status endSession() override;
+  Status releaseCaches();
+  size_t identityCount() const {
+    return count_;
   }
   void notifyDirectoryChanged(uint64_t dir);
   // Use (volume/session, id) for leases. IDs are shared by aliases and survive
@@ -172,8 +192,20 @@ private:
   Registry ownRegistry_;
   Registry *registry_;
   uint64_t nextId_ = 2, rootId_ = 1, revision_ = 1;
+  Node **buckets_ = nullptr;
+  size_t bucketCount_ = 0, count_ = 0;
+  bool rehash(size_t capacity);
+  void trim();
+  Node *named(uint64_t parent, const char *name, size_t length) const;
+  Node *makeNode(uint64_t parent, const char *name, size_t length, uint64_t id);
+  void link(Node *);
+  void unlink(Node *);
+  void destroy(Node *);
+  bool descendant(const Node *, uint64_t parent) const;
+  Status path(const Node *, char *out) const;
+  void clearNodes();
   bool ensure();
-  Node *node(uint64_t);
+  Node *node(uint64_t) const;
   Node *find(const char *);
   Status intern(const char *, uint64_t &);
   Status child(uint64_t, const char *, char *);
@@ -182,5 +214,9 @@ private:
   void forget(const char *);
   void changed(Node *);
   Status writeData(uint64_t, uint64_t, const uint8_t *, size_t &, bool);
+  Status attributes(uint64_t, Attr &, char *);
+  Status readDirectory(uint64_t, uint64_t, uint64_t, Entry &, bool &, bool);
 };
 } // namespace esp32_nfs
+
+#include "PathVfs.ipp"

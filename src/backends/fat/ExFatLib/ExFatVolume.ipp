@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -23,44 +24,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
-#pragma once
 namespace esp32_nfs { namespace fat {
 
-#ifndef ESP32NFS_PRIVATE_FsFormatter_h
-#define ESP32NFS_PRIVATE_FsFormatter_h
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
+#define DBG_FILE "ExFatVolume.cpp"
 } } // namespace esp32_nfs::fat
-#include "../ExFatLib/ExFatLib.h"
-#include "../FatLib/FatLib.h"
+// Arduino resolves the library through its public header.
+#include <SdFat.h>
+
+#include <common/DebugMacros.h>
+#include "ExFatLib.h"
 namespace esp32_nfs { namespace fat {
-/**
- * \class FsFormatter
- * \brief Format a exFAT/FAT volume.
- */
-class FsFormatter {
- public:
-  /** Constructor. */
-  FsFormatter() = default;
-  /**
-   * Format a FAT volume.
-   *
-   * \param[in] dev Block device for volume.
-   * \param[in] secBuffer buffer for writing to volume.
-   * \param[in] pr Print device for progress output.
-   *
-   * \return true for success or false for failure.
-   */
-  bool format(FsBlockDevice* dev, uint8_t* secBuffer, print_t* pr = nullptr) {
-    uint32_t sectorCount = dev->sectorCount();
-    if (sectorCount == 0) {
-      return false;
-    }
-    return sectorCount <= 67108864 ? m_fFmt.format(dev, secBuffer, pr)
-                                   : m_xFmt.format(dev, secBuffer, pr);
+//-----------------------------------------------------------------------------
+inline bool ExFatVolume::chdir(const char* path) {
+  ExFatFile dir;
+  if (!dir.open(vwd(), path, O_RDONLY)) {
+    DBG_FAIL_MACRO;
+    goto fail;
   }
+  if (!dir.isDir()) {
+    DBG_FAIL_MACRO;
+    goto fail;
+  }
+  m_vwd.copy(&dir);
+  return true;
 
- private:
-  FatFormatter m_fFmt;
-  ExFatFormatter m_xFmt;
-};
-#endif  // ESP32NFS_PRIVATE_FsFormatter_h
+fail:
+  return false;
+}
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

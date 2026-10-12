@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2022 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -30,7 +31,7 @@
 
 #include <common/FsUtf.h>
 namespace esp32_nfs { namespace fat {
-uint16_t FsName::get16() {
+inline uint16_t FsName::get16() {
   uint16_t rtn;
   if (ls) {
     rtn = ls;

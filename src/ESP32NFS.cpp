@@ -10,10 +10,7 @@ namespace esp32_nfs {
 struct Server::Workspace {
   uint8_t *request = nullptr;
   uint8_t *reply = nullptr;
-  ~Workspace() {
-    delete[] request;
-    delete[] reply;
-  }
+  size_t recordBytes = 0;
   struct Replay {
     bool used = false;
     uint64_t peer = 0;
@@ -138,66 +135,99 @@ bool auth(XdrIn &x, bool credential) {
   return a.done();
 }
 } // namespace
-Server::Server(Vfs &v, Lease *l) : defaultVfs_(&v), exports_(&ownExports_), lease_(l) {}
-Server::Server(ExportMap &e, Lease *l) : defaultVfs_(nullptr), exports_(&e), lease_(l) {}
+Server::Server(Vfs &v, Lease *l, Memory &memory)
+    : memory_(memory), defaultVfs_(&v), exports_(&ownExports_), lease_(l) {}
+Server::Server(ExportMap &e, Lease *l, Memory &memory)
+    : memory_(memory), defaultVfs_(nullptr), exports_(&e), lease_(l) {}
 Server::~Server() {
   stop();
 }
-size_t Server::activeWorkspaceBytes() {
-  return sizeof(Workspace) + 2 * RecordSize + 4;
+size_t Server::activeWorkspaceBytes(size_t payload) {
+  return payload >= 512 && payload <= MaxBlockSize ? sizeof(Workspace) + 2 * (payload + 512) + 4
+                                                   : 0;
+}
+void Server::releaseWorkspace(bool buffersOnly) {
+  if (!work_)
+    return;
+  memory_.release(work_->request, work_->recordBytes);
+  memory_.release(work_->reply, work_->recordBytes + 4);
+  work_->request = work_->reply = nullptr;
+  if (!buffersOnly) {
+    work_->~Workspace();
+    memory_.release(work_, sizeof(Workspace));
+    work_ = nullptr;
+  }
+  metrics_.ownedHeap = work_ ? sizeof(Workspace) : 0;
 }
 bool Server::ensureWorkspace() {
-  if (!work_)
-    work_ = new (std::nothrow) Workspace;
-  if (!work_)
+  bool created = !work_;
+  if (!work_) {
+    void *p = memory_.allocate(sizeof(Workspace));
+    if (p) {
+      work_ = new (p) Workspace;
+      work_->recordBytes = config_.blockSize + 512;
+    }
+  }
+  if (work_) {
+    if (!work_->request)
+      work_->request = static_cast<uint8_t *>(memory_.allocate(work_->recordBytes));
+    if (!work_->reply)
+      work_->reply = static_cast<uint8_t *>(memory_.allocate(work_->recordBytes + 4));
+  }
+  if (!work_ || !work_->request || !work_->reply) {
+    releaseWorkspace(!created);
+    ++metrics_.memoryFailures;
+    lastStatus_ = Jukebox;
     return false;
-  if (!work_->request)
-    work_->request = new (std::nothrow) uint8_t[RecordSize];
-  if (!work_->reply)
-    work_->reply = new (std::nothrow) uint8_t[RecordSize + 4];
-  metrics_.ownedHeap =
-      sizeof(Workspace) + (work_->request ? RecordSize : 0) + (work_->reply ? RecordSize + 4 : 0);
+  }
+  metrics_.ownedHeap = activeWorkspaceBytes(config_.blockSize);
   metrics_.peakOwnedHeap = std::max(metrics_.peakOwnedHeap, metrics_.ownedHeap);
-  return work_->request && work_->reply;
+  return true;
 }
 bool Server::begin(Transport &t, const Config &c, uint64_t epoch) {
-  stop();
-  if (!epoch || !c.exportPath || strlen(c.exportPath) >= ExportMap::PathCapacity ||
-      c.exportPath[0] != '/' || c.blockSize > BlockSize || c.blockSize < 512 ||
-      !c.directoryEntriesPerRpc || !c.connections || c.connections > ESP32_NFS_CONNECTION_COUNT ||
-      !c.ioBytesPerPoll || !c.recordTimeoutMs || c.recordTimeoutMs > INT32_MAX ||
-      !c.idleTimeoutMs || c.idleTimeoutMs > INT32_MAX || !c.replayWindowMs ||
-      c.replayWindowMs > INT32_MAX)
+  if (!epoch || !ExportMap::validPath(c.exportPath) || c.blockSize > MaxBlockSize ||
+      c.blockSize < 512 || !c.directoryEntriesPerRpc || !c.connections ||
+      c.connections > ESP32_NFS_CONNECTION_COUNT || !c.ioBytesPerPoll || !c.recordTimeoutMs ||
+      c.recordTimeoutMs > INT32_MAX || !c.idleTimeoutMs || c.idleTimeoutMs > INT32_MAX ||
+      !c.replayWindowMs || c.replayWindowMs > INT32_MAX) {
+    lastStatus_ = Invalid;
+    return false;
+  }
+  if (stop() != Ok)
     return false;
   config_ = c;
-  if (defaultVfs_ && !ownExports_.add(c.exportPath, *defaultVfs_))
+  if (defaultVfs_ && !ownExports_.add(c.exportPath, *defaultVfs_)) {
+    lastStatus_ = Invalid;
     return false;
+  }
   mappingRevision_ = exports_->revision();
   epoch_ = epoch;
   peerSet_ = false;
   metrics_ = Metrics();
-  if (!t.listen(c.port))
+  if (!t.listen(c.port)) {
+    t.stop();
+    lastStatus_ = Io;
     return false;
+  }
+  lastStatus_ = Ok;
   transport_ = &t;
   return true;
 }
-void Server::stop() {
+Status Server::stop() {
+  bool active = epoch_ || transport_ || work_ || stopPending_;
   if (transport_) {
     for (unsigned i = 0; i < ESP32_NFS_CONNECTION_COUNT; ++i)
       if (connections_[i].socket >= 0)
         transport_->close(connections_[i].socket);
     transport_->stop();
   }
-  if (defaultVfs_)
-    ownExports_.clear();
-  else
-    exports_->endSessions();
+  Status result =
+      active ? (defaultVfs_ ? ownExports_.clear(lease_) : exports_->endSessions(lease_)) : Ok;
+  stopPending_ = result != Ok;
   transport_ = nullptr;
   for (auto &c : connections_)
     c = Connection();
-  delete work_;
-  work_ = nullptr;
-  metrics_.ownedHeap = 0;
+  releaseWorkspace();
   owner_ = -1;
   peerSet_ = false;
   epoch_ = 0;
@@ -205,6 +235,7 @@ void Server::stop() {
   tokenFraction_ = 0;
   tokenTime_ = 0;
   nextConnection_ = 0;
+  return lastStatus_ = result;
 }
 void Server::drop(unsigned i) {
   if (transport_ && connections_[i].socket >= 0)
@@ -233,17 +264,12 @@ void Server::poll(uint32_t now) {
     active |= c.socket >= 0;
   // Retain exact replay records across reconnects for the configured replay window.
   if (!active && work_) {
-    delete[] work_->request;
-    delete[] work_->reply;
-    work_->request = work_->reply = nullptr;
-    metrics_.ownedHeap = sizeof(Workspace);
+    releaseWorkspace(true);
     bool live = false;
     for (auto &r : work_->replay)
       live |= r.used && uint32_t(now - r.time) < config_.replayWindowMs;
     if (!live) {
-      delete work_;
-      work_ = nullptr;
-      metrics_.ownedHeap = 0;
+      releaseWorkspace();
       peerSet_ = false;
     }
   }
@@ -348,7 +374,7 @@ void Server::poll(uint32_t now) {
       c.finalFragment = m >> 31;
       c.remaining = m & 0x7fffffff;
       c.markerUsed = 0;
-      if (++c.fragments > 64 || c.remaining > RecordSize - c.received) {
+      if (++c.fragments > 64 || c.remaining > work_->recordBytes - c.received) {
         ++metrics_.rejected;
         drop(owner_);
         return;
@@ -376,7 +402,7 @@ void Server::poll(uint32_t now) {
         tokens_ -= n;
     }
     if (!c.remaining && c.finalFragment) {
-      size_t n = rpc(work_->request, c.received, work_->reply + 4, RecordSize, c.peer, now);
+      size_t n = rpc(work_->request, c.received, work_->reply + 4, work_->recordBytes, c.peer, now);
       if (!n) {
         drop(owner_);
         return;
@@ -393,10 +419,20 @@ void Server::poll(uint32_t now) {
 }
 size_t Server::rpc(const uint8_t *req, size_t length, uint8_t *out, size_t capacity, uint64_t peer,
                    uint32_t now) {
-  if (!epoch_ || length < 24 || length > RecordSize || capacity < ReplayReplySize ||
-      !ensureWorkspace())
+  if (!req || !out || !epoch_ || length < 24 || length > config_.blockSize + 512 ||
+      capacity < ReplayReplySize)
     return 0;
-  exports_->refreshGenerations();
+  if (!ensureWorkspace() || (lastStatus_ = exports_->refreshGenerations(lease_)) != Ok) {
+    XdrIn x(req, length);
+    XdrOut y(out, capacity);
+    y.u32(x.u32());
+    y.u32(1);
+    y.u32(0);
+    y.u32(0);
+    y.u32(0);
+    y.u32(5);
+    return y.pos;
+  }
   if (mappingRevision_ != exports_->revision()) {
     for (auto &replay : work_->replay)
       replay.used = false;
@@ -647,7 +683,7 @@ size_t Server::dispatch(const uint8_t *req, size_t length, uint8_t *out, size_t 
     offset = x.u64();
     count = x.u32();
     stable = x.u32();
-    payload = x.opaque(payloadSize, BlockSize);
+    payload = x.opaque(payloadSize, config_.blockSize);
     if (stable > 2 || count != payloadSize || count > config_.blockSize)
       x.valid = false;
     break;
@@ -746,7 +782,10 @@ size_t Server::dispatch(const uint8_t *req, size_t length, uint8_t *out, size_t 
   bool mutating = proc == 2 || proc == 7 || (proc >= 8 && proc <= 15) || proc == 21;
   if (status == Ok && mutating && readOnly && proc != 21)
     status = ReadOnly;
-  auto putStatus = [&]() { y.u32(status); };
+  auto putStatus = [&]() {
+    lastStatus_ = status;
+    y.u32(status);
+  };
   auto putWcc = [&]() {
     wcc(y, crossVolume ? nullptr : vfs, id, hasBefore ? &before : nullptr, volume);
   };
