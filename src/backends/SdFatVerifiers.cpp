@@ -36,7 +36,7 @@ bool valid(uint8_t *p) {
   return !memcmp(d, p + 480, 32);
 }
 struct Close {
-  FsFile &f;
+  fat::FsBaseFile &f;
   ~Close() {
     f.close();
   }
@@ -85,7 +85,7 @@ bool SdFatVerifiers::header() {
   memcpy(b, "ENFSVR01", 8);
   put32(b + 8, count_);
   sha256(b, 480, b + 480);
-  FsFile f = volume_.open(Database, O_RDWR);
+  fat::FsBaseFile f = volume_.open(Database, O_RDWR);
   Close close{f};
   return f && f.seekSet(0) && f.write(b, 512) == 512 && f.sync();
 }
@@ -98,7 +98,7 @@ Status SdFatVerifiers::initialize() {
     return load() ? Ok : Io;
   if (!volume_.exists("/.esp32-nfs") && !volume_.mkdir("/.esp32-nfs", false))
     return Io;
-  FsFile f = volume_.open(Database, O_CREAT | O_EXCL | O_RDWR);
+  fat::FsBaseFile f = volume_.open(Database, O_CREAT | O_EXCL | O_RDWR);
   if (!f)
     return Io;
   f.close();
@@ -122,7 +122,7 @@ bool SdFatVerifiers::load() {
   if (!index_)
     return false;
   uint8_t b[512];
-  FsFile f = volume_.open(Database, O_RDONLY);
+  fat::FsBaseFile f = volume_.open(Database, O_RDONLY);
   Close close{f};
   if (!f || f.read(b, 512) != 512 || memcmp(b, "ENFSVR01", 8) || !valid(b))
     return false;
@@ -142,7 +142,7 @@ bool SdFatVerifiers::load() {
 }
 bool SdFatVerifiers::readSlot(uint32_t slot, Record &r) {
   uint8_t b[512];
-  FsFile f = volume_.open(Database, O_RDONLY);
+  fat::FsBaseFile f = volume_.open(Database, O_RDONLY);
   Close close{f};
   if (!f || !f.seekSet(uint64_t(slot + 1) * 512) || f.read(b, 512) != 512 ||
       memcmp(b, "ENFSVE01", 8) || !valid(b))
@@ -165,7 +165,7 @@ bool SdFatVerifiers::writeSlot(uint32_t slot, const Record &r) {
   put32(b + 32, strlen(r.path));
   memcpy(b + 40, r.path, strlen(r.path));
   sha256(b, 480, b + 480);
-  FsFile f = volume_.open(Database, O_RDWR);
+  fat::FsBaseFile f = volume_.open(Database, O_RDWR);
   Close close{f};
   return f && f.seekSet(uint64_t(slot + 1) * 512) && f.write(b, 512) == 512 && f.sync();
 }

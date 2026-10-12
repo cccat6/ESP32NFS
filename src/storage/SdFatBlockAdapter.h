@@ -4,9 +4,7 @@
 #include "SectorJournal.h"
 #include <SdFat.h>
 #include <string.h>
-#if !USE_BLOCK_DEVICE_INTERFACE
-#error "Compile sketch AND SdFat with USE_BLOCK_DEVICE_INTERFACE=1 for generic device mounting."
-#endif
+
 namespace esp32_nfs {
 namespace storage {
 class SdFatBlockAdapter : public FsBlockDeviceInterface {

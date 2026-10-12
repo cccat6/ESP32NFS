@@ -19,7 +19,7 @@
 
 1. 在 Arduino 开发板管理器中安装 **esp32 by Espressif Systems**。
 2. 在库管理器中安装 **SdFat 2.3.0**。
-3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.1.1.zip**。
+3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.2.0.zip**。
 4. 在 Arduino IDE 中选择 **项目 → 加载库 → 添加 .ZIP 库**，导入压缩包。
 5. 打开 **文件 → 示例 → ESP32NFS → LittleFSShare**，填写 Wi-Fi 信息后编译上传。
 

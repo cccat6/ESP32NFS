@@ -11,12 +11,13 @@ add_link_options(-fsanitize=address,undefined)
 file(GLOB CORE "${LIBRARY_ROOT}/src/*.cpp" "${LIBRARY_ROOT}/src/storage/*.cpp")
 file(GLOB SDFAT "${SDFAT_SOURCE}/src/FatLib/*.cpp" "${SDFAT_SOURCE}/src/ExFatLib/*.cpp"
                 "${SDFAT_SOURCE}/src/FsLib/*.cpp" "${SDFAT_SOURCE}/src/common/*.cpp")
-add_executable(checks checks.cpp ${CORE} ${SDFAT}
-    "${LIBRARY_ROOT}/src/backends/PathVfs.cpp" "${LIBRARY_ROOT}/src/backends/SdFatVerifiers.cpp")
+file(GLOB_RECURSE PRIVATE_FAT "${LIBRARY_ROOT}/src/backends/fat/*.cpp")
+add_executable(checks checks.cpp ${CORE} ${SDFAT} ${PRIVATE_FAT}
+    "${LIBRARY_ROOT}/src/backends/SdFatStorage.cpp" "${LIBRARY_ROOT}/src/backends/PathVfs.cpp" "${LIBRARY_ROOT}/src/backends/SdFatVerifiers.cpp")
 target_include_directories(checks PRIVATE shim "${LIBRARY_ROOT}/src" "${SDFAT_SOURCE}/src")
 target_compile_definitions(checks PRIVATE ENABLE_ARDUINO_FEATURES=1 ARDUINO=10819
     ENABLE_ARDUINO_SERIAL=0 ENABLE_ARDUINO_STRING=0 SDFAT_FILE_TYPE=3 SPI_DRIVER_SELECT=3
-    USE_BLOCK_DEVICE_INTERFACE=1 USE_UTF8_LONG_NAMES=1 USE_LONG_FILE_NAMES=1)
+    USE_BLOCK_DEVICE_INTERFACE=1)
 target_compile_options(checks PRIVATE -U__ARM_FEATURE_UNALIGNED)
 find_package(Threads REQUIRED)
 target_link_libraries(checks PRIVATE Threads::Threads)

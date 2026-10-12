@@ -1,4 +1,5 @@
 #include "fixture.h"
+static_assert(USE_UTF8_LONG_NAMES == 0, "Test the installed SdFat default configuration");
 static uint64_t create(PathVfs &fs, uint64_t dir, const char *name, bool directory = false,
                        uint32_t how = 0, uint64_t verifier = 0) {
   uint64_t id = 0;
@@ -27,11 +28,51 @@ int checks() {
   for (bool exfat : {false, true})
     for (bool transactional : {false, true}) {
       Fixture f(exfat, transactional);
+      {
+        auto seed = f.volume.open("/共存.txt", O_CREAT | O_RDWR);
+        assert(seed && seed.write("utf8", 4) == 4 && seed.sync());
+        seed.close();
+        f.volume.end();
+        ::FsVolume ordinary;
+        assert(ordinary.begin(&f.disk, false, 1));
+        ::FsFile ascii = ordinary.open("/stock.txt", O_CREAT | O_RDWR);
+        assert(ascii && ascii.write("stock", 5) == 5 && ascii.sync());
+        ascii.close();
+        ordinary.end();
+        assert(f.volume.begin(&f.disk, false, 1));
+        char data[5];
+        auto original = f.volume.open("/共存.txt", O_RDONLY);
+        assert(original && original.read(data, 4) == 4 && !memcmp(data, "utf8", 4));
+        original.close();
+        auto shared = f.volume.open("/stock.txt", O_RDONLY);
+        assert(shared && shared.read(data, 5) == 5 && !memcmp(data, "stock", 5));
+        shared.close();
+        assert(f.volume.remove("/共存.txt") && f.volume.remove("/stock.txt"));
+      }
+      if (!exfat) {
+        std::vector<std::string> spellings;
+        for (unsigned n = 1; n <= 19; ++n) {
+          spellings.push_back(std::string("/") + char('A' + n) + "Mixed_" +
+                              std::string(n * 13 - 7, char('a' + n)));
+          auto file = f.volume.open(spellings.back().c_str(), O_CREAT | O_RDWR);
+          assert(file);
+          file.close();
+        }
+        for (auto &spelling : spellings) {
+          std::string alias = "/" + f.alias(spelling.c_str());
+          auto file = f.volume.open(alias.c_str(), O_RDONLY);
+          char stored[PathSize];
+          assert(file && file.getName(stored, sizeof(stored)));
+          assert(spelling.substr(1) == stored);
+          file.close();
+          assert(f.volume.remove(alias.c_str()));
+        }
+      }
       auto &fs = f.fs;
       auto root = fs.root();
       // Files supplied by another filesystem client acquire one identity even
       // when their first NFS lookup uses an alias instead of the stored spelling.
-      FsFile preexisting = f.volume.open("/Preexisting_中文_É.txt", O_CREAT | O_RDWR);
+      fat::FsBaseFile preexisting = f.volume.open("/Preexisting_中文_É.txt", O_CREAT | O_RDWR);
       assert(preexisting);
       preexisting.close();
       std::string firstName = exfat ? "preexisting_中文_é.TXT" : f.alias("/Preexisting_中文_É.txt");
@@ -190,7 +231,7 @@ int checks() {
         std::string longDir(128, 'd'), longFile(128, 'f');
         auto parent = "/" + longDir, whole = parent + "/" + longFile;
         assert(f.volume.mkdir(parent.c_str(), false));
-        FsFile large = f.volume.open(whole.c_str(), O_CREAT | O_RDWR);
+        fat::FsBaseFile large = f.volume.open(whole.c_str(), O_CREAT | O_RDWR);
         assert(large);
         large.close();
         auto shortPath = "/" + f.alias(parent.c_str()) + "/" + f.alias(whole.c_str());
@@ -209,6 +250,7 @@ int checks() {
 }
 
 #include "fixture.h"
+static_assert(USE_UTF8_LONG_NAMES == 0, "Test the installed SdFat default configuration");
 #include "transports/SocketTransport.h"
 #include <chrono>
 #include <signal.h>

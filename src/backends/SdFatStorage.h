@@ -3,7 +3,7 @@
 #include "../storage/SectorJournal.h"
 #include "PathVfs.h"
 #include "SdFatVerifiers.h"
-#include <SdFat.h>
+#include "SdFatVolume.h"
 #include <algorithm>
 #include <common/upcase.h>
 #include <string.h>
@@ -11,17 +11,10 @@
 #if SD_FAT_VERSION != 20300
 #error "ESP32NFS SdFat adapter is validated against SdFat 2.3.0; pin that version."
 #endif
-#if SDFAT_FILE_TYPE != 3
-#error "Use SDFAT_FILE_TYPE=3 for one FAT32/exFAT stack."
-#endif
-#if !USE_LONG_FILE_NAMES || !USE_UTF8_LONG_NAMES
-#error                                                                                             \
-    "Build sketch and SdFat with USE_LONG_FILE_NAMES=1 and USE_UTF8_LONG_NAMES=1. See docs/storage.md."
-#endif
 namespace esp32_nfs {
 class SdFatStorage : public PathStorage {
 public:
-  explicit SdFatStorage(FsVolume &sd) : sd_(sd), verifiers_(sd) {}
+  explicit SdFatStorage(SdFatVolume &sd) : sd_(sd), verifiers_(sd) {}
   using Remount = bool (*)(void *);
   void attachTransactions(storage::SectorJournal &journal, Remount remount, void *context) {
     journal_ = &journal;
@@ -210,7 +203,7 @@ private:
     if ((a.uidSet && a.uid) || (a.gidSet && a.gid) || a.atimeHow || a.mtimeHow)
       return NotSupported;
     if (a.sizeSet) {
-      FsFile f = sd_.open(p, O_RDWR);
+      fat::FsBaseFile f = sd_.open(p, O_RDWR);
       CloseFile closeFile{f};
       if (!f)
         return Access;
@@ -265,7 +258,7 @@ public:
       return status;
     if (a.type != 1)
       return IsDir;
-    FsFile &f = readFile_;
+    fat::FsBaseFile &f = readFile_;
     if (off >= f.fileSize()) {
       n = 0;
       return Ok;
@@ -281,7 +274,7 @@ public:
 
 private:
   Status writeImpl(const char *p, uint64_t off, const uint8_t *data, size_t &n) {
-    FsFile f = sd_.open(p, O_RDWR);
+    fat::FsBaseFile f = sd_.open(p, O_RDWR);
     CloseFile closeFile{f};
     if (!f)
       return Access;
@@ -317,7 +310,7 @@ private:
       return Exist;
     if (directory)
       return sd_.mkdir(p, false) ? Ok : Io;
-    FsFile f = sd_.open(p, O_RDWR | O_CREAT | O_EXCL);
+    fat::FsBaseFile f = sd_.open(p, O_RDWR | O_CREAT | O_EXCL);
     CloseFile closeFile{f};
     return f && f.sync() ? Ok : Io;
   }
@@ -385,7 +378,7 @@ public:
     }
     unsigned budget = scanBudget_;
     while (nextIndex_ <= index && budget--) {
-      FsFile f;
+      fat::FsBaseFile f;
       CloseFile close{f};
       if (!f.openNext(&directory_, O_RDONLY)) {
         eof = true;
@@ -407,16 +400,7 @@ public:
       strcpy(lastName_, found);
       lastIndex_ = index;
       lastValid_ = true;
-      lastAttr_ = Attr();
-      lastAttr_.type = f.isDir() ? 2 : 1;
-      lastAttr_.mode = f.isDir() ? 0777 : 0666;
-      if (f.attrib() & FS_ATTRIB_READ_ONLY)
-        lastAttr_.mode &= ~0222;
-      lastAttr_.size = lastAttr_.used = f.isDir() ? 0 : f.fileSize();
-      uint16_t date = 0, t = 0;
-      if (f.getModifyDateTime(&date, &t))
-        lastAttr_.atime.seconds = lastAttr_.ctime.seconds = lastAttr_.mtime.seconds =
-            dosTime(date, t);
+      attributes(f, lastAttr_);
       return copyEntry(name, cap, eof);
     }
     return Jukebox;
@@ -454,7 +438,7 @@ public:
   }
 
 private:
-  // Indexed reopen recovers LFN state omitted when a FAT object is opened by its SFN.
+  // The filesystem preserves stored LFN state for both long-name and SFN opens.
   Status canonicalize(const char *input, char *out, size_t cap, bool allowMissing = false,
                       bool preserveLeaf = false) {
     if (poison_)
@@ -475,7 +459,7 @@ private:
     }
     char request[PathSize];
     strcpy(request, input);
-    FsFile dir = sd_.open("/", O_RDONLY);
+    fat::FsBaseFile dir = sd_.open("/", O_RDONLY);
     CloseFile closeDir{dir};
     if (!dir)
       return Io;
@@ -485,7 +469,7 @@ private:
       char *next = strchr(part, '/');
       if (next)
         *next = 0;
-      FsFile file;
+      fat::FsBaseFile file;
       CloseFile closeFile{file};
       if (!file.open(&dir, part, O_RDONLY)) {
         if (dir.getError())
@@ -501,10 +485,6 @@ private:
         }
         return NoEnt;
       }
-      uint32_t index = file.dirIndex();
-      file.close();
-      if (!dir.seekSet(uint64_t(index) * 32) || !file.open(&dir, index, O_RDONLY))
-        return Io;
       if (!file.isFileOrSubDir())
         return NotSupported;
       char stored[PathSize];
@@ -552,18 +532,19 @@ private:
     }
     return Ok;
   }
-  void cacheAttributes(const char *path) {
-    FsFile &f = readFile_;
-    readAttr_ = Attr();
-    readAttr_.type = f.isDir() ? 2 : 1;
-    readAttr_.mode = f.isDir() ? 0777 : 0666;
+  static void attributes(fat::FsBaseFile &f, Attr &a) {
+    a = Attr();
+    a.type = f.isDir() ? 2 : 1;
+    a.mode = f.isDir() ? 0777 : 0666;
     if (f.attrib() & FS_ATTRIB_READ_ONLY)
-      readAttr_.mode &= ~0222;
-    readAttr_.size = readAttr_.used = f.isDir() ? 0 : f.fileSize();
+      a.mode &= ~0222;
+    a.size = a.used = f.isDir() ? 0 : f.fileSize();
     uint16_t date = 0, time = 0;
     if (f.getModifyDateTime(&date, &time))
-      readAttr_.atime.seconds = readAttr_.ctime.seconds = readAttr_.mtime.seconds =
-          dosTime(date, time);
+      a.atime.seconds = a.ctime.seconds = a.mtime.seconds = dosTime(date, time);
+  }
+  void cacheAttributes(const char *path) {
+    attributes(readFile_, readAttr_);
     strcpy(readPath_, path);
   }
   storage::SectorJournal *journal_ = nullptr;
@@ -571,50 +552,21 @@ private:
   void *context_ = nullptr;
   bool poison_ = false;
   SdFatVerifiers verifiers_;
+  Status transactImpl(Status (*operation)(void *), void *argument);
   template <class F> Status transact(F operation) {
-    if (poison_)
-      return Io;
-    invalidateCaches();
-    if (!journal_) {
-      Status s = operation();
-      invalidateCaches();
-      return s;
-    }
-    if (!remount_ || !journal_->healthy())
-      return Io;
-    storage::Error e = journal_->begin();
-    if (e != storage::Error::Ok)
-      return Io;
-    Status status = operation();
-    invalidateCaches();
-    if (status == Ok) {
-      e = journal_->commit();
-      if (e == storage::Error::Ok)
-        return Ok;
-      poison_ = true;
-      return Io;
-    }
-    e = journal_->abort();
-    if (e != storage::Error::Ok)
-      e = journal_->recover();
-    verifiers_.invalidate();
-    if (e != storage::Error::Ok || !remount_(context_)) {
-      poison_ = true;
-      return Io;
-    }
-    return status;
+    return transactImpl([](void *p) { return (*static_cast<F *>(p))(); }, &operation);
   }
   struct CloseFile {
-    FsFile &file;
+    fat::FsBaseFile &file;
     ~CloseFile() {
       file.close();
     }
   };
-  FsVolume &sd_;
+  SdFatVolume &sd_;
   Space cachedSpace_;
   bool spaceValid_ = false;
   uint32_t scanBudget_ = 64;
-  FsFile directory_, readFile_;
+  fat::FsBaseFile directory_, readFile_;
   char readPath_[PathSize] = {};
   Attr readAttr_;
   char directoryPath_[PathSize] = {}, lastName_[PathSize] = {};
