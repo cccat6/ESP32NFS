@@ -1,0 +1,64 @@
+name: CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+  workflow_call:
+
+permissions:
+  contents: read
+
+jobs:
+  lint:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Select Arduino registry mode
+        id: registry
+        run: |
+          python3 - <<'PY'
+          import gzip, json, os, urllib.request
+          url = 'https://downloads.arduino.cc/libraries/library_index.json.gz'
+          with urllib.request.urlopen(url, timeout=60) as response:
+              index = json.loads(gzip.decompress(response.read()))
+          found = any(item['name'] == 'ESP32NFS' for item in index['libraries'])
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write('mode=' + ('update' if found else 'submit') + '\n')
+          PY
+      - uses: arduino/arduino-lint-action@v3
+        with:
+          compliance: strict
+          library-manager: ${{ steps.registry.outputs.mode }}
+      - name: Verify distribution layout
+        run: |
+          python3 - <<'PY'
+          from pathlib import Path
+          allowed = {'.git', '.github', '.gitignore', '.gitattributes', '.clang-format',
+                     'src', 'examples', 'docs', 'README.md', 'README.zh-CN.md',
+                     'LICENSE', 'NOTICE.md', 'CONTRIBUTING.md', 'library.properties', 'keywords.txt'}
+          assert all(p.name in allowed for p in Path('.').iterdir())
+          assert not any(p.is_symlink() for p in Path('.').rglob('*'))
+          PY
+
+  compile:
+    runs-on: ubuntu-latest
+    strategy:
+      fail-fast: false
+      matrix:
+        board: [esp32, esp32c3, esp32c6, esp32s3]
+    steps:
+      - uses: actions/checkout@v7
+      - uses: arduino/setup-arduino-cli@v2
+      - name: Install platform and dependencies
+        run: |
+          arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli core install esp32:esp32@3.3.11 --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
+          arduino-cli lib install 'SdFat@2.3.0'
+      - name: Compile examples
+        env:
+          BOARD: ${{ matrix.board }}
+        run: |
+          for sketch in examples/*; do
+            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$sketch"
+          done

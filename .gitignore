@@ -1,0 +1,10 @@
+build*/
+.pio/
+.vscode/
+.idea/
+.DS_Store
+*.bin
+*.elf
+*.map
+*.zip
+arduino_secrets.h

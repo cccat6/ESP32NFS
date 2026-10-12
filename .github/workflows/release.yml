@@ -1,0 +1,77 @@
+name: Release
+
+on:
+  push:
+    tags: ['v*']
+  workflow_dispatch:
+    inputs:
+      version:
+        description: Version matching library.properties, for example 1.0.0
+        type: string
+        required: true
+
+permissions:
+  contents: read
+
+concurrency:
+  group: release-${{ github.event.inputs.version || github.ref_name }}
+  cancel-in-progress: false
+
+jobs:
+  version:
+    runs-on: ubuntu-latest
+    outputs:
+      version: ${{ steps.metadata.outputs.version }}
+      tag: ${{ steps.metadata.outputs.tag }}
+    steps:
+      - uses: actions/checkout@v7
+      - name: Verify release version
+        id: metadata
+        env:
+          INPUT_VERSION: ${{ inputs.version }}
+        run: |
+          python3 - <<'PY'
+          import os, pathlib, re
+          props = dict(line.split('=', 1) for line in pathlib.Path('library.properties').read_text().splitlines() if '=' in line)
+          version = props['version']
+          assert re.fullmatch(r'\d+\.\d+\.\d+', version), 'Use a numeric semantic version'
+          expected = os.environ['INPUT_VERSION'] if os.environ['GITHUB_EVENT_NAME'] == 'workflow_dispatch' else os.environ['GITHUB_REF_NAME'].removeprefix('v')
+          assert version == expected, 'Tag/input and library.properties must match'
+          with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
+              output.write(f'version={version}\ntag=v{version}\n')
+          PY
+
+  validate:
+    needs: version
+    uses: ./.github/workflows/ci.yml
+
+  publish:
+    needs: [version, validate]
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - uses: actions/checkout@v7
+        with:
+          fetch-depth: 0
+      - name: Create source archive and release
+        env:
+          GH_TOKEN: ${{ github.token }}
+          VERSION: ${{ needs.version.outputs.version }}
+          TAG: ${{ needs.version.outputs.tag }}
+        run: |
+          set -euo pipefail
+          if git rev-parse --verify "refs/tags/$TAG" >/dev/null 2>&1; then
+            test "$(git rev-list -n 1 "$TAG")" = "$GITHUB_SHA"
+          else
+            git tag "$TAG" "$GITHUB_SHA"
+            git push origin "$TAG"
+          fi
+          if gh release view "$TAG" >/dev/null 2>&1; then
+            exit 0
+          fi
+          asset="ESP32NFS-$VERSION.zip"
+          git archive --format=zip --prefix=ESP32NFS/ --output="$RUNNER_TEMP/$asset" "$TAG"
+          (cd "$RUNNER_TEMP" && sha256sum "$asset" > SHA256SUMS)
+          gh release create "$TAG" "$RUNNER_TEMP/$asset" "$RUNNER_TEMP/SHA256SUMS" \
+            --verify-tag --title "ESP32NFS $VERSION" --generate-notes --latest
