@@ -61,7 +61,7 @@ jobs:
           BOARD: ${{ matrix.board }}
         run: |
           for sketch in LittleFSShare SdCardShare MappedVolumes MemoryShares; do
-            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
+            arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
           done
 
   esp32-network:
@@ -101,7 +101,7 @@ jobs:
           void setup() { server.begin(transport, Config(), 1); }
           void loop() { server.poll(millis()); delay(1); }
           CPP
-          arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/NetworkBuild"
+          arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/NetworkBuild"
 
   esp32-source-sdk:
     name: ESP-IDF (${{ matrix.target }})
@@ -183,5 +183,23 @@ jobs:
           BOARD: ${{ matrix.board }}
         run: |
           for sketch in PicoWShare PicoSdCardShare; do
-            arduino-cli compile --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "examples/$sketch"
+            arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "examples/$sketch"
           done
+
+  unicode:
+    name: UTF-8 and file identities
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v7
+      - name: Build filesystem and independent client dependencies
+        run: |
+          git clone --branch 2.3.0 --depth 1 https://github.com/greiman/SdFat.git "$RUNNER_TEMP/SdFat"
+          git clone --branch libnfs-8.0.0 --depth 1 https://github.com/sahlberg/libnfs.git "$RUNNER_TEMP/libnfs"
+          cmake -S "$RUNNER_TEMP/libnfs" -B "$RUNNER_TEMP/libnfs-build" -DBUILD_SHARED_LIBS=ON -DENABLE_UTILS=OFF -DENABLE_TESTS=OFF
+          cmake --build "$RUNNER_TEMP/libnfs-build" --parallel 2
+      - name: Check FAT32/exFAT names, aliases and native NFS client
+        run: |
+          cmake -S .github/checks/unicode -B "$RUNNER_TEMP/unicode-build" \
+            -DSDFAT_SOURCE="$RUNNER_TEMP/SdFat" -DLIBNFS_SOURCE="$RUNNER_TEMP/libnfs" -DLIBNFS_BUILD="$RUNNER_TEMP/libnfs-build"
+          cmake --build "$RUNNER_TEMP/unicode-build" --parallel 2
+          ctest --test-dir "$RUNNER_TEMP/unicode-build" --output-on-failure

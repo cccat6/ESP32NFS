@@ -14,6 +14,8 @@ The application mounts LittleFS, creates a `PathVfs`, and starts the TCP server.
 
 ## SD cards
 
+The ESP32 SD examples supply UTF-8/LFN options through `build_opt.h`. Apply the [same global build definitions](names-and-identities.md) when integrating the library into an application or Pico sketch.
+
 Open `SdCardShare` and set the Wi-Fi credentials and `NFS_EXAMPLE_CS`. Configure your board's SPI pins before card initialization when using a custom wiring layout. The example uses shared SPI with a FreeRTOS mutex, so the application can coordinate storage with other peripherals.
 
 FAT32 provides broad removable-media compatibility. exFAT provides large-file storage. `SdFatStorage` connects either filesystem to the same NFS interface.

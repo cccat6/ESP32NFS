@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "../ESP32NFS.h"
+#include "../Names.h"
 #include <string.h>
 namespace esp32_nfs {
 // A storage adapter must stay inside its export root and disallow symlinks. Bounded read
@@ -13,6 +14,27 @@ public:
     return 1;
   }
   virtual Status stat(const char *, Attr &) = 0;
+  virtual bool sameName(const char *a, const char *b) const {
+    return !strcmp(a, b);
+  }
+  virtual Status validateName(const char *name) const {
+    return name_detail::component(name);
+  }
+  // Resolve existing objects to stored, absolute names. Alias-providing backends
+  // override this method; output may alias input. This operation is read-only.
+  virtual Status resolve(const char *p, char *canonical, size_t capacity, Attr &a) {
+    Status s = name_detail::path(p);
+    if (s != Ok)
+      return s;
+    if (caseInsensitive())
+      return NotSupported;
+    if (!canonical || strlen(p) >= capacity)
+      return NameTooLong;
+    s = stat(p, a);
+    if (s == Ok)
+      memmove(canonical, p, strlen(p) + 1);
+    return s;
+  }
   virtual Status setattr(const char *, const SetAttr &) = 0;
   virtual Status read(const char *, uint64_t, uint8_t *, size_t &) = 0;
   virtual Status write(const char *, uint64_t, const uint8_t *, size_t &) = 0;
@@ -94,12 +116,17 @@ public:
   ~PathVfs();
   PathVfs(const PathVfs &) = delete;
   PathVfs &operator=(const PathVfs &) = delete;
-  // External writers must notify before access resumes. invalidateAll changes all IDs.
+  // External namespace changes/remounts require invalidateAll before access resumes.
+  // notifyDirectoryChanged refreshes cookies/caches while existing paths remain valid.
   void invalidateAll();
   void endSession() override {
     invalidateAll();
   }
   void notifyDirectoryChanged(uint64_t dir);
+  // Use (volume/session, id) for leases. IDs are shared by aliases and survive
+  // library-managed rename. Hold the same volume lease through resolve/authorize/I/O.
+  Status resolvePath(const char *absolute, uint64_t &id);
+  Status canonicalPath(uint64_t id, char *output, size_t capacity);
   size_t registryBytes() const;
   uint64_t generation() const override {
     return storage_.generation();

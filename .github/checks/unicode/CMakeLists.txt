@@ -1,0 +1,32 @@
+cmake_minimum_required(VERSION 3.16)
+project(esp32nfs_unicode LANGUAGES C CXX)
+set(CMAKE_CXX_STANDARD 11)
+set(CMAKE_CXX_STANDARD_REQUIRED ON)
+get_filename_component(LIBRARY_ROOT "${CMAKE_CURRENT_SOURCE_DIR}/../../.." ABSOLUTE)
+set(SDFAT_SOURCE "" CACHE PATH "SdFat 2.3.0 source")
+set(LIBNFS_SOURCE "" CACHE PATH "libnfs 8.0.0 source")
+set(LIBNFS_BUILD "" CACHE PATH "libnfs build")
+add_compile_options(-fsanitize=address,undefined -fno-omit-frame-pointer)
+add_link_options(-fsanitize=address,undefined)
+file(GLOB CORE "${LIBRARY_ROOT}/src/*.cpp" "${LIBRARY_ROOT}/src/storage/*.cpp")
+file(GLOB SDFAT "${SDFAT_SOURCE}/src/FatLib/*.cpp" "${SDFAT_SOURCE}/src/ExFatLib/*.cpp"
+                "${SDFAT_SOURCE}/src/FsLib/*.cpp" "${SDFAT_SOURCE}/src/common/*.cpp")
+add_executable(checks checks.cpp ${CORE} ${SDFAT}
+    "${LIBRARY_ROOT}/src/backends/PathVfs.cpp" "${LIBRARY_ROOT}/src/backends/SdFatVerifiers.cpp")
+target_include_directories(checks PRIVATE shim "${LIBRARY_ROOT}/src" "${SDFAT_SOURCE}/src")
+target_compile_definitions(checks PRIVATE ENABLE_ARDUINO_FEATURES=1 ARDUINO=10819
+    ENABLE_ARDUINO_SERIAL=0 ENABLE_ARDUINO_STRING=0 SDFAT_FILE_TYPE=3 SPI_DRIVER_SELECT=3
+    USE_BLOCK_DEVICE_INTERFACE=1 USE_UTF8_LONG_NAMES=1 USE_LONG_FILE_NAMES=1)
+target_compile_options(checks PRIVATE -U__ARM_FEATURE_UNALIGNED)
+find_package(Threads REQUIRED)
+target_link_libraries(checks PRIVATE Threads::Threads)
+add_executable(client client.c)
+target_include_directories(client PRIVATE "${LIBNFS_SOURCE}/include")
+find_library(NFS_CLIENT nfs PATHS "${LIBNFS_BUILD}/lib" REQUIRED NO_DEFAULT_PATH)
+target_link_libraries(client PRIVATE "${NFS_CLIENT}")
+enable_testing()
+add_test(NAME names-and-identities COMMAND checks)
+find_package(Python3 REQUIRED COMPONENTS Interpreter)
+add_test(NAME native-client COMMAND "${Python3_EXECUTABLE}" "${CMAKE_CURRENT_SOURCE_DIR}/client.py"
+    "$<TARGET_FILE:checks>" "$<TARGET_FILE:client>")
+set_tests_properties(names-and-identities native-client PROPERTIES ENVIRONMENT "UBSAN_OPTIONS=halt_on_error=1")

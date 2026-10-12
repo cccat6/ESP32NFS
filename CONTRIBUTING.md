@@ -10,4 +10,6 @@ Contributions to storage adapters, ESP32 integration, documentation and examples
 
 The repository contains the distributable library, application examples, user documentation and release automation. Keep local device credentials, experimental firmware, development utilities, measurements and build products in an external development workspace.
 
+Automated regression checks live under `.github/checks`; their disk images and build output are generated in the runner workspace. Release archives contain the library and user documentation.
+
 The code is licensed under MIT. Preserve third-party attribution when contributing externally sourced code.

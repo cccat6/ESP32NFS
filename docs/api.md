@@ -29,7 +29,9 @@ esp32_nfs::Server nfs(exports);
 
 `add(path, vfs, readOnly, lease)` associates a mount path with a filesystem, an access policy and an optional shared-resource lease. Paths are mounted individually by NFS clients. Mapping and backend generations scope file handles and duplicate-request state.
 
-Stop the server before changing the physical media or remounting a filesystem. Release its caches, mount the new medium, update the export mapping and start a fresh session. `PathVfs::invalidateAll()` refreshes path identities; `notifyDirectoryChanged()` records application-managed directory changes.
+Stop the server before changing the physical media or remounting a filesystem. Release its caches, mount the new medium, update the export mapping and start a fresh session. `PathVfs::invalidateAll()` refreshes path identities; `notifyDirectoryChanged()` refreshes directory cookies and metadata caches. Use `invalidateAll()` for external namespace replacement, renaming or remounting.
+
+[Names and identities](names-and-identities.md) describes `resolvePath()`, `canonicalPath()` and alias-aware authorization.
 
 ## Configuration
 

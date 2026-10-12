@@ -2,8 +2,9 @@
 // Enable this optional SdFat-specific translation unit only when its dependency is available.
 #include "SdFatVerifiers.h"
 #include "../Digest.h"
+#include "../Names.h"
 #include "../storage/SectorJournal.h"
-#include <ctype.h>
+#include <common/upcase.h>
 #include <new>
 #include <string.h>
 namespace esp32_nfs {
@@ -43,7 +44,8 @@ struct Close {
 } // namespace
 bool SdFatVerifiers::equal(const char *a, const char *b) {
   while (*a && *b)
-    if (tolower((unsigned char)*a++) != tolower((unsigned char)*b++))
+    if (name_detail::asciiLower((unsigned char)*a++) !=
+        name_detail::asciiLower((unsigned char)*b++))
       return false;
   return *a == *b;
 }
@@ -52,22 +54,28 @@ bool SdFatVerifiers::below(const char *p, const char *base) {
   if (strlen(p) <= n || p[n] != '/')
     return false;
   for (size_t i = 0; i < n; ++i)
-    if (tolower((unsigned char)p[i]) != tolower((unsigned char)base[i]))
+    if (name_detail::asciiLower((unsigned char)p[i]) !=
+        name_detail::asciiLower((unsigned char)base[i]))
       return false;
   return true;
 }
 bool SdFatVerifiers::reserved(const char *p) {
-  const char prefix[] = "/.esp32-nfs";
-  constexpr size_t length = sizeof(prefix) - 1;
-  for (unsigned i = 0; i < length; ++i)
-    if (tolower((unsigned char)p[i]) != prefix[i])
+  if (!p)
+    return false;
+  if (*p == '/')
+    ++p;
+  const char *end = p + strlen(p);
+  for (const char *q = ".ESP32-NFS"; *q; ++q) {
+    uint32_t cp;
+    if (!name_detail::next(p, end, cp) || cp > 0xffff || toUpcase(uint16_t(cp)) != uint8_t(*q))
       return false;
-  return p[length] == 0 || p[length] == '/';
+  }
+  return p == end || *p == '/';
 }
 uint64_t SdFatVerifiers::key(const char *p) {
   uint64_t key = 14695981039346656037ULL;
   for (; *p; ++p) {
-    key ^= tolower((unsigned char)*p);
+    key ^= name_detail::asciiLower((unsigned char)*p);
     key *= 1099511628211ULL;
   }
   return key ? key : 1; // full path comparison still resolves hash collisions
