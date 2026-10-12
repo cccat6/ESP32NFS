@@ -1,7 +1,9 @@
 // SPDX-License-Identifier: MIT
 #pragma once
-#include "fat/FsLib/FsLib.h"
+// Discover the Arduino dependency before its internal headers.
 #include <SdFat.h>
+
+#include "fat/FsLib/FsLib.h"
 namespace esp32_nfs {
 // UTF-8 names and generic block I/O are fixed inside the filesystem implementation.
 using SdFatVolume = fat::FsVolume;

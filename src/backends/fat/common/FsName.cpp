@@ -23,6 +23,9 @@
  * DEALINGS IN THE SOFTWARE.
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
+// Arduino resolves the library through its public header.
+#include <SdFat.h>
+
 #include "FsName.h"
 
 #include <common/FsUtf.h>

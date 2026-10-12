@@ -27,6 +27,9 @@ namespace esp32_nfs { namespace fat {
 
 #define DBG_FILE "ExFatFilePrint.cpp"
 } } // namespace esp32_nfs::fat
+// Arduino resolves the library through its public header.
+#include <SdFat.h>
+
 #include <common/DebugMacros.h>
 #include <common/FsUtf.h>
 #include "ExFatLib.h"

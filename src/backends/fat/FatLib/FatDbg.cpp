@@ -23,6 +23,9 @@
  * DEALINGS IN THE SOFTWARE.
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
+// Arduino resolves the library through its public header.
+#include <SdFat.h>
+
 #include "FatLib.h"
 namespace esp32_nfs { namespace fat {
 #ifndef DOXYGEN_SHOULD_SKIP_THIS

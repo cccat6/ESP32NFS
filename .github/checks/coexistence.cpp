@@ -1,7 +1,9 @@
 // Compile both filesystem implementations with the dependency's default name configuration.
 #include <SdFat.h>
 #include <backends/SdFatStorage.h>
-static_assert(USE_UTF8_LONG_NAMES == 0, "No application UTF-8 build flags");
+#if defined(ARDUINO_ARCH_ESP32)
+static_assert(USE_UTF8_LONG_NAMES == 0, "Stock ESP32 SdFat default");
+#endif
 SdFs ordinary;
 esp32_nfs::SdFatCard exported;
 esp32_nfs::SdFatStorage storage(exported);
