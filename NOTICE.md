@@ -5,6 +5,7 @@ ESP32NFS original source is distributed under the MIT License.
 | Dependency | Integration | License |
 |---|---|---|
 | [Arduino ESP32](https://github.com/espressif/arduino-esp32) | ESP32 platform, Wi-Fi and filesystem APIs | LGPL-2.1 and bundled component licenses |
+| [Arduino-Pico](https://github.com/earlephilhower/arduino-pico) | Pico W and Pico 2 W networking and filesystem APIs | LGPL-2.1 and bundled component licenses |
 | [SdFat](https://github.com/greiman/SdFat) 2.3.0 | FAT32 and exFAT | MIT |
 | [LittleFS](https://github.com/littlefs-project/littlefs) | Platform-provided Flash filesystem | BSD-3-Clause |
 | ArduinoSATA | Optional block-device adapter | BSD-2-Clause |

@@ -12,3 +12,4 @@ SectorJournal	KEYWORD1
 begin	KEYWORD2
 poll	KEYWORD2
 add	KEYWORD2
+PicoWiFiTransport	KEYWORD1

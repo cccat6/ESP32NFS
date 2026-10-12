@@ -2,7 +2,7 @@
 
 ## GitHub Actions
 
-The CI workflow checks Arduino library metadata and compiles every example for ESP32, ESP32-C3, ESP32-C6 and ESP32-S3. It automatically selects the Arduino Lint submission or update mode from the current library index.
+The CI workflow checks Arduino library metadata and runs the [complete platform matrix](platforms.md) for all ten ESP32 SoCs, Pico W and Pico 2 W. It automatically selects the Arduino Lint submission or update mode from the current library index.
 
 For a release:
 

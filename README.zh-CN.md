@@ -1,6 +1,6 @@
 # ESP32NFS
 
-**面向 ESP32 的 NFSv3 文件共享库。** 通过 Wi-Fi 共享 SD 卡、内部 Flash、RAM 和固件资源，使用统一接口管理文件系统与分区。
+**面向 ESP32 和 Raspberry Pi Pico W 的 NFSv3 文件共享库。** 通过 Wi-Fi 共享 SD 卡、内部 Flash、RAM 和固件资源，使用统一接口管理文件系统与分区。
 
 [English](README.md) · [使用指南](docs/getting-started.md) · [存储接入](docs/storage.md) · [API](docs/api.md)
 
@@ -18,7 +18,7 @@
 
 1. 在 Arduino 开发板管理器中安装 **esp32 by Espressif Systems**。
 2. 在库管理器中安装 **SdFat 2.3.0**。
-3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.0.0.zip**。
+3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.1.0.zip**。
 4. 在 Arduino IDE 中选择 **项目 → 加载库 → 添加 .ZIP 库**，导入压缩包。
 5. 打开 **文件 → 示例 → ESP32NFS → LittleFSShare**，填写 Wi-Fi 信息后编译上传。
 
@@ -53,6 +53,10 @@ esp32_nfs::Server nfs(exports);
 
 每个共享路径对应自己的存储后端。客户端可以分别挂载 `/sd`、`/flash`、`/ram` 和 `/rom`。RAM 保存运行期间的数据；ROM 以只读方式提供编译进固件的文件；LittleFS 和 SD 卡保存持久化文件。
 
+## 平台
+
+CI 覆盖 ESP32、S2、S3、C2、C3、C5、C6、C61、H2、P4，以及 Pico W 和 Pico 2 W。[平台文档](docs/platforms.md)列出了各型号的构建方式和示例。
+
 ## 示例与文档
 
 | 示例 | 用途 |
@@ -61,6 +65,8 @@ esp32_nfs::Server nfs(exports);
 | [SdCardShare](examples/SdCardShare) | 共享 FAT32 / exFAT SD 卡 |
 | [MappedVolumes](examples/MappedVolumes) | 同时映射两个 SD 分区、RAM 和 ROM |
 | [MemoryShares](examples/MemoryShares) | 提供内存文件和固件资源 |
+| [PicoWShare](examples/PicoWShare) | Pico Wi-Fi 共享 RAM、ROM 和 LittleFS 资源 |
+| [PicoSdCardShare](examples/PicoSdCardShare) | Pico Wi-Fi 共享 FAT32 / exFAT SD 卡 |
 
 完整文档包含[使用指南](docs/getting-started.md)、[存储与元数据](docs/storage.md)、[驱动接口](docs/driver-interface.md)、[API](docs/api.md)、[性能配置](docs/performance.md)和[自动发布流程](docs/releasing.md)。
 

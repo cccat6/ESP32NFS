@@ -2,7 +2,7 @@
 
 ## Board and dependencies
 
-Install the Espressif ESP32 Arduino core and SdFat 2.3.0. The build workflow uses ESP32 core 3.3.11 and compiles the examples for ESP32, ESP32-C3, ESP32-C6 and ESP32-S3.
+Install the Espressif ESP32 Arduino core and SdFat 2.3.0. The build workflow uses ESP32 core 3.3.11 and covers the complete ESP32 SoC family through its Arduino and source-SDK routes. Arduino-Pico 6.0.0 supplies Pico W and Pico 2 W integration; see the [platform guide](platforms.md).
 
 Select your board and its Flash size in Arduino IDE. For LittleFS, choose a partition scheme containing a filesystem partition. The LittleFSShare example uses the Arduino `spiffs` partition label and the `/littlefs` VFS mount path.
 

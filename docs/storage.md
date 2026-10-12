@@ -23,8 +23,8 @@ NFS ownership and mode fields follow fixed export/backend policy. FAT's native r
 ## LittleFS
 
 ```cpp
-LittleFsStorage storage("/littlefs", "spiffs");
-PathVfs files(storage);
+LittleFsStorage flashStorage("/littlefs", "spiffs");
+PathVfs files(flashStorage);
 ```
 
 The application mounts LittleFS before starting the export. The adapter uses native file operations for reads, writes, truncation, synchronization and atomic replacement rename. An 8KiB payload cache combines small UNSTABLE writes into ordered batches. COMMIT and stable WRITE synchronize the file before returning success.
