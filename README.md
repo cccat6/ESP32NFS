@@ -30,7 +30,7 @@ ESP32NFS uses the Arduino library format. Arduino CLI also supports ZIP installa
 
 ```sh
 arduino-cli lib install 'SdFat@2.3.0'
-arduino-cli lib install --zip-path ESP32NFS-1.0.0.zip
+ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.0.0.zip
 ```
 
 ## Share a filesystem
