@@ -1,6 +1,7 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "../ESP32NFS.h"
+#include "../Names.h"
 #include <algorithm>
 #include <string.h>
 namespace esp32_nfs {
@@ -56,8 +57,9 @@ public:
       return s;
     if (a.type != 2)
       return NotDir;
-    if (!*name || strchr(name, '/'))
-      return Invalid;
+    Status valid = name_detail::component(name);
+    if (valid != Ok)
+      return valid;
     if (!strcmp(name, ".")) {
       id = dir;
       return Ok;

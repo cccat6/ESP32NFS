@@ -1,6 +1,5 @@
 // SPDX-License-Identifier: MIT
 #include "PathVfs.h"
-#include <ctype.h>
 #include <new>
 #include <string.h>
 namespace esp32_nfs {
@@ -56,23 +55,35 @@ void PathVfs::invalidateAll() {
   ++revision_;
 }
 bool PathVfs::equal(const char *a, const char *b) const {
-  if (!caseInsensitive())
-    return strcmp(a, b) == 0;
-  while (*a && *b) {
-    if (tolower((unsigned char)*a++) != tolower((unsigned char)*b++))
-      return false;
-  }
-  return *a == *b;
+  return !strcmp(a, b);
 }
 bool PathVfs::below(const char *p, const char *base) const {
-  size_t n = strlen(base);
-  if (strlen(p) <= n)
-    return false;
-  for (size_t i = 0; i < n; ++i)
-    if (caseInsensitive() ? tolower((unsigned char)p[i]) != tolower((unsigned char)base[i])
-                          : p[i] != base[i])
-      return false;
-  return p[n] == '/';
+  return name_detail::below(p, base);
+}
+Status PathVfs::resolvePath(const char *p, uint64_t &id) {
+  char canonical[PathSize];
+  Attr a;
+  Status s = storage_.resolve(p, canonical, sizeof(canonical), a);
+  if (s != Ok)
+    return s;
+  Node *existing = find(canonical);
+  if (existing && existing->storageId && a.id && existing->storageId != a.id)
+    forget(canonical);
+  s = intern(canonical, id);
+  if (s == Ok)
+    node(id)->storageId = a.id;
+  return s;
+}
+Status PathVfs::canonicalPath(uint64_t id, char *out, size_t cap) {
+  Attr a;
+  Status s = getattr(id, a);
+  if (s != Ok)
+    return s;
+  const char *p = node(id)->path;
+  if (!out || strlen(p) >= cap)
+    return NameTooLong;
+  memcpy(out, p, strlen(p) + 1);
+  return Ok;
 }
 PathVfs::Node *PathVfs::node(uint64_t id) {
   if (!id)
@@ -149,8 +160,9 @@ Status PathVfs::child(uint64_t dir, const char *name, char *path) {
     return s;
   if (a.type != 2)
     return NotDir;
-  if (!*name || strchr(name, '/') || strchr(name, '\\'))
-    return Invalid;
+  Status valid = name_detail::component(name);
+  if (valid != Ok)
+    return valid;
   Node *n = node(dir);
   if (!strcmp(name, ".")) {
     strcpy(path, n->path);
@@ -165,14 +177,10 @@ Status PathVfs::child(uint64_t dir, const char *name, char *path) {
       *p = 0;
     return Ok;
   }
-  // FAT aliases/trailing dots are ambiguous. Reject them in case-insensitive backends.
+  s = storage_.validateName(name);
+  if (s != Ok)
+    return s;
   size_t z = strlen(name);
-  if (caseInsensitive())
-    for (size_t i = 0; i < z; ++i)
-      if ((unsigned char)name[i] >= 128 || strchr("\"*:<>?|", name[i]))
-        return Invalid;
-  if (caseInsensitive() && (name[z - 1] == '.' || name[z - 1] == ' '))
-    return Invalid;
   size_t len = strlen(n->path), sep = len > 1 ? 1 : 0;
   if (len + sep + z >= PathSize)
     return NameTooLong;
@@ -188,7 +196,7 @@ Status PathVfs::lookup(uint64_t d, const char *name, uint64_t &id) {
   if (s != Ok)
     return s;
   Attr a;
-  s = storage_.stat(p, a);
+  s = storage_.resolve(p, p, sizeof(p), a);
   if (s != Ok)
     return s;
   Node *existing = find(p);
@@ -257,7 +265,7 @@ Status PathVfs::create(uint64_t d, const char *name, bool directory, uint32_t ho
   if (s != Ok)
     return s;
   Attr a;
-  s = storage_.stat(p, a);
+  s = storage_.resolve(p, p, sizeof(p), a);
   if (s == Ok) {
     if (how == 2) {
       s = storage_.createExclusive(p, verifier);
@@ -271,6 +279,9 @@ Status PathVfs::create(uint64_t d, const char *name, bool directory, uint32_t ho
     return s == Ok ? setattr(id, attrs) : s;
   }
   if (s != NoEnt)
+    return s;
+  s = child(d, name, p);
+  if (s != Ok)
     return s;
   // Reserve identity before mutating storage, so capacity exhaustion cannot orphan a CREATE result.
   s = intern(p, id);
@@ -308,7 +319,7 @@ Status PathVfs::remove(uint64_t d, const char *name, bool directory) {
   if (s != Ok)
     return s;
   Attr a;
-  s = storage_.stat(p, a);
+  s = storage_.resolve(p, p, sizeof(p), a);
   if (s != Ok)
     return s;
   if (directory != (a.type == 2))
@@ -330,10 +341,21 @@ Status PathVfs::rename(uint64_t from, const char *old, uint64_t to, const char *
   s = child(to, name, b);
   if (s != Ok)
     return s;
-  if (equal(a, b) && !strcmp(a, b)) {
-    Attr attr;
-    return storage_.stat(a, attr);
-  }
+  Attr attr;
+  s = storage_.resolve(a, a, sizeof(a), attr);
+  if (s != Ok)
+    return s;
+  char scratch[PathSize];
+  Status destination = storage_.resolve(b, scratch, sizeof(scratch), attr);
+  if (destination != Ok && destination != NoEnt)
+    return destination;
+  bool replacing = destination == Ok && !equal(a, scratch);
+  if (destination == Ok && !replacing && !storage_.sameName(a, b))
+    return Ok;
+  if (replacing)
+    strcpy(b, scratch);
+  if (!strcmp(a, b))
+    return Ok;
   if (below(b, a))
     return Invalid;
   size_t an = strlen(a), bn = strlen(b);
@@ -345,15 +367,14 @@ Status PathVfs::rename(uint64_t from, const char *old, uint64_t to, const char *
   s = storage_.rename(a, b);
   if (s != Ok)
     return s;
-  if (!equal(a, b))
+  if (replacing)
     forget(b);
   for (size_t i = 0; i < ESP32_NFS_HANDLE_COUNT; ++i)
     if (registry_->nodes_[i].owner == this && registry_->nodes_[i].id &&
         (equal(registry_->nodes_[i].path, a) || below(registry_->nodes_[i].path, a))) {
-      char tmp[PathSize];
-      strcpy(tmp, b);
-      strcat(tmp, registry_->nodes_[i].path + an);
-      strcpy(registry_->nodes_[i].path, tmp);
+      strcpy(scratch, b);
+      strcat(scratch, registry_->nodes_[i].path + an);
+      strcpy(registry_->nodes_[i].path, scratch);
       changed(registry_->nodes_ + i);
     }
   changed(node(from));

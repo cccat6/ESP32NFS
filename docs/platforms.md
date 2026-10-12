@@ -11,7 +11,7 @@ ESP32NFS serves ESP32 applications and Raspberry Pi Pico Wi-Fi boards through a 
 | Raspberry Pi Pico W | Arduino-Pico 6.0.0 | PicoWShare and PicoSdCardShare |
 | Raspberry Pi Pico 2 W | Arduino-Pico 6.0.0 | PicoWShare and PicoSdCardShare |
 
-The matrix covers all ten SoCs declared by Arduino ESP32 3.3.11, plus the RP2040 and RP2350 Wi-Fi boards. Each GitHub Release runs the complete matrix. Generated build applications and compiler output live in the runner's temporary workspace.
+The matrix covers all ten SoCs declared by Arduino ESP32 3.3.11, plus the RP2040 and RP2350 Wi-Fi boards. Each GitHub Release runs the complete matrix and the UTF-8/file-identity regression job. That job runs real SdFat image filesystems with an independent libnfs client on Linux. Generated build applications and compiler output live in the runner's temporary workspace.
 
 ## ESP32 networking
 

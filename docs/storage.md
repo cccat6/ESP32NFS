@@ -33,6 +33,8 @@ The application mounts LittleFS before starting the export. The adapter uses nat
 
 ## SD cards and multiple partitions
 
+Enable `USE_LONG_FILE_NAMES=1` and `USE_UTF8_LONG_NAMES=1` for the application and SdFat compilation. The [name guide](names-and-identities.md) covers build configuration and canonical file identities.
+
 Initialize a card once, then create a separate `FsVolume` and `SdFatStorage` for each mounted partition. Pass a shared `PathVfs::Registry` to allocate path identities from one application-sized pool. Use one volume owner and a shared bus lease for coordinated access.
 
 The generic block layer supplies `Partition` views and primary MBR/GPT discovery for application-managed devices. Custom USB, SPI and virtual drivers expose the same block interface described in [driver-interface.md](driver-interface.md).

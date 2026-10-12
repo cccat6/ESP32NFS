@@ -5,6 +5,7 @@
 #include "SdFatVerifiers.h"
 #include <SdFat.h>
 #include <algorithm>
+#include <common/upcase.h>
 #include <string.h>
 #include <time.h>
 #if SD_FAT_VERSION != 20300
@@ -12,6 +13,10 @@
 #endif
 #if SDFAT_FILE_TYPE != 3
 #error "Use SDFAT_FILE_TYPE=3 for one FAT32/exFAT stack."
+#endif
+#if !USE_LONG_FILE_NAMES || !USE_UTF8_LONG_NAMES
+#error                                                                                             \
+    "Build sketch and SdFat with USE_LONG_FILE_NAMES=1 and USE_UTF8_LONG_NAMES=1. See docs/storage.md."
 #endif
 namespace esp32_nfs {
 class SdFatStorage : public PathStorage {
@@ -35,6 +40,30 @@ public:
     return !poison_;
   }
 
+  bool sameName(const char *a, const char *b) const override {
+    const char *ae = a + strlen(a), *be = b + strlen(b);
+    while (a < ae && b < be) {
+      uint32_t x, y;
+      if (!name_detail::next(a, ae, x) || !name_detail::next(b, be, y))
+        return false;
+      if (x <= 0xffff)
+        x = toUpcase(uint16_t(x));
+      if (y <= 0xffff)
+        y = toUpcase(uint16_t(y));
+      if (x != y)
+        return false;
+    }
+    return a == ae && b == be;
+  }
+  Status validateName(const char *p) const override {
+    return name_detail::component(p, true);
+  }
+  Status resolve(const char *p, char *canonical, size_t cap, Attr &a) override {
+    Status s = canonicalize(p, canonical, cap);
+    if (s == Ok)
+      a = readAttr_;
+    return s == Access ? NoEnt : s;
+  }
   Status setattr(const char *p, const SetAttr &a) override {
     if (SdFatVerifiers::reserved(p))
       return Access;
@@ -42,7 +71,8 @@ public:
     if ((a.uidSet && a.uid) || (a.gidSet && a.gid) || a.atimeHow || a.mtimeHow)
       return NotSupported;
     Attr old;
-    Status s = stat(p, old);
+    char canonical[PathSize];
+    Status s = resolve(p, canonical, sizeof(canonical), old);
     if (s != Ok)
       return s;
     SetAttr update = a;
@@ -52,71 +82,88 @@ public:
       update.modeSet = false;
     if (!update.sizeSet && !update.modeSet)
       return Ok;
-    return transact([&]() { return setattrImpl(p, update); });
+    return transact([&]() { return setattrImpl(canonical, update); });
   }
   Status write(const char *p, uint64_t off, const uint8_t *data, size_t &n) override {
-    if (SdFatVerifiers::reserved(p))
-      return Access;
-    return transact([&]() { return writeImpl(p, off, data, n); });
+    char canonical[PathSize];
+    Status s = canonicalize(p, canonical, sizeof(canonical));
+    if (s != Ok)
+      return s;
+    return transact([&]() { return writeImpl(canonical, off, data, n); });
   }
   Status create(const char *p, bool dir) override {
-    return transact([&]() { return createImpl(p, dir); });
+    char canonical[PathSize];
+    Status s = canonicalize(p, canonical, sizeof(canonical), true);
+    if (s != Ok)
+      return s;
+    return transact([&]() { return createImpl(canonical, dir); });
   }
   Status remove(const char *p, bool dir) override {
+    char canonical[PathSize];
+    Status resolved = canonicalize(p, canonical, sizeof(canonical));
+    if (resolved != Ok)
+      return resolved;
     return transact([&]() {
-      Status s = removeImpl(p, dir);
+      Status s = removeImpl(canonical, dir);
       if (s == Ok && journal_)
-        s = verifiers_.erase(p);
+        s = verifiers_.erase(canonical);
       return s;
     });
   }
   Status rename(const char *a, const char *b) override {
-    if (SdFatVerifiers::reserved(a) || SdFatVerifiers::reserved(b))
-      return Access;
-    if (!journal_)
-      return renameImpl(a, b);
-    return transact([&]() {
-      Attr source, target;
-      Status s = stat(a, source);
+    char from[PathSize], to[PathSize];
+    Status s = canonicalize(a, from, sizeof(from));
+    if (s != Ok)
+      return s;
+    uint32_t sourceType = readAttr_.type;
+    Status t = canonicalize(b, to, sizeof(to));
+    if (t != Ok && t != NoEnt)
+      return t;
+    uint32_t targetType = readAttr_.type;
+    bool same = t == Ok && !strcmp(from, to);
+    if (t == NoEnt || same) {
+      s = canonicalize(b, to, sizeof(to), true, true);
       if (s != Ok)
         return s;
-      Status t = stat(b, target);
-      bool same = t == Ok && samePath(a, b);
-      if (!strcmp(a, b))
-        return Ok;
+    }
+    if (!strcmp(from, to) || (same && !sameName(from, to)))
+      return Ok;
+    if (name_detail::below(to, from))
+      return Invalid;
+    return transact([&]() {
+      if (!journal_)
+        return renameImpl(from, to);
       if (same) {
-        Status moved = verifiers_.moveTree(a, b);
+        Status moved = verifiers_.moveTree(from, to);
         if (moved != Ok)
           return moved;
         if (!sd_.exists("/.esp32-nfs") && !sd_.mkdir("/.esp32-nfs", false))
           return Io;
         if (sd_.exists("/.esp32-nfs/case.tmp"))
           return Io;
-        if (!sd_.rename(a, "/.esp32-nfs/case.tmp") || !sd_.rename("/.esp32-nfs/case.tmp", b))
-          return Io;
-        return Ok;
+        return sd_.rename(from, "/.esp32-nfs/case.tmp") && sd_.rename("/.esp32-nfs/case.tmp", to)
+                   ? Ok
+                   : Io;
       }
-
-      if (t != Ok && t != NoEnt)
-        return t;
-      if (t == Ok && source.type != target.type)
-        return target.type == 2 ? IsDir : NotDir;
-      s = verifiers_.moveTree(a, b);
-      if (s != Ok)
-        return s;
+      if (t == Ok && sourceType != targetType)
+        return targetType == 2 ? IsDir : NotDir;
+      Status moved = verifiers_.moveTree(from, to);
+      if (moved != Ok)
+        return moved;
       if (t == Ok) {
-        s = removeImpl(b, target.type == 2);
-        if (s != Ok)
-          return s;
+        Status removed = removeImpl(to, targetType == 2);
+        if (removed != Ok)
+          return removed;
       }
-      if (!sd_.rename(a, b))
-        return Io;
-      return Ok;
+      return sd_.rename(from, to) ? Ok : Io;
     });
   }
-  Status createExclusive(const char *p, uint64_t verifier) override {
-    if (SdFatVerifiers::reserved(p))
-      return Access;
+  Status createExclusive(const char *input, uint64_t verifier) override {
+    char canonical[PathSize];
+    Status resolved = canonicalize(input, canonical, sizeof(canonical), true);
+    if (resolved != Ok)
+      return resolved;
+    const char *p = canonical;
     if (!journal_)
       return NotSupported;
     return transact([&]() {
@@ -149,44 +196,15 @@ public:
   Status stat(const char *p, Attr &a) override {
     if (poison_)
       return Io;
-    if (SdFatVerifiers::reserved(p))
-      return NoEnt;
-    if (readFile_ && !strcmp(readPath_, p)) {
+    if (readFile_ && p && !strcmp(readPath_, p)) {
       a = readAttr_;
       return Ok;
     }
-    readFile_.close();
-    readPath_[0] = 0;
-    readFile_ = sd_.open(p, O_RDONLY);
-    FsFile &f = readFile_;
-    if (!f)
-      return sd_.exists(p) ? Access : NoEnt;
-    if (!f.isDir() && !f.isFile())
-      return NotSupported;
-    // FAT 8.3 aliases can address the protected directory under another spelling.
-    if (journal_ && f.isDir() && p[1] && !strchr(p + 1, '/')) {
-      FsFile internal = sd_.open("/.esp32-nfs", O_RDONLY);
-      CloseFile closeInternal{internal};
-      if (internal && internal.dirIndex() == f.dirIndex())
-        return NoEnt;
-    }
-    a = Attr();
-    a.type = f.isDir() ? 2 : 1;
-    a.mode = f.isDir() ? 0777 : 0666;
-    if (f.attrib() & FS_ATTRIB_READ_ONLY)
-      a.mode &= ~0222;
-    a.size = f.isDir() ? 0 : f.fileSize();
-    a.used = a.size;
-    uint16_t date = 0, t = 0;
-    if (f.getModifyDateTime(&date, &t)) {
-      a.mtime.seconds = dosTime(date, t);
-      a.ctime = a.mtime;
-      a.atime = a.mtime;
-    }
-    strcpy(readPath_, p);
-    readAttr_ = a;
-    return Ok;
+    char canonical[PathSize];
+    return resolve(p, canonical, sizeof(canonical), a);
   }
+
+private:
   Status setattrImpl(const char *p, const SetAttr &a) {
     // FAT has a read-only bit, not arbitrary Unix permissions or ownership.
     if ((a.uidSet && a.uid) || (a.gidSet && a.gid) || a.atimeHow || a.mtimeHow)
@@ -234,6 +252,8 @@ public:
     }
     return Ok;
   }
+
+public:
   Status read(const char *p, uint64_t off, uint8_t *data, size_t &n) override {
     if (poison_)
       return Io;
@@ -258,6 +278,8 @@ public:
     n = got;
     return Ok;
   }
+
+private:
   Status writeImpl(const char *p, uint64_t off, const uint8_t *data, size_t &n) {
     FsFile f = sd_.open(p, O_RDWR);
     CloseFile closeFile{f};
@@ -327,6 +349,8 @@ public:
       return NotSupported;
     return sd_.rename(a, b) ? Ok : Io;
   }
+
+public:
   void invalidateCaches() override {
     readFile_.close();
     readPath_[0] = 0;
@@ -335,13 +359,12 @@ public:
     nextIndex_ = 0;
     lastValid_ = false;
   }
-  Status entry(const char *p, uint64_t index, char *name, size_t cap, bool &eof) override {
-    if (poison_)
-      return Io;
-    if (SdFatVerifiers::reserved(p))
-      return Access;
-    if (strlen(p) >= PathSize)
-      return NameTooLong;
+  Status entry(const char *input, uint64_t index, char *name, size_t cap, bool &eof) override {
+    char canonical[PathSize];
+    Status resolved = canonicalize(input, canonical, sizeof(canonical));
+    if (resolved != Ok)
+      return resolved;
+    const char *p = canonical;
     if (!directory_ || strcmp(p, directoryPath_)) {
       invalidateCaches();
       directory_ = sd_.open(p, O_RDONLY);
@@ -374,8 +397,11 @@ public:
       size_t n = f.getName(found, sizeof(found));
       if (!n || n >= sizeof(found) - 1)
         return NameTooLong;
-      if (!strcmp(p, "/") && samePath(found, ".esp32-nfs"))
+      if (!strcmp(p, "/") && SdFatVerifiers::reserved(found))
         continue;
+      Status valid = validateName(found);
+      if (valid != Ok)
+        return valid;
       if (nextIndex_++ != index)
         continue;
       strcpy(lastName_, found);
@@ -403,11 +429,9 @@ public:
     return s;
   }
   Status sync(const char *p) override {
-    if (poison_ || SdFatVerifiers::reserved(p))
-      return Io;
-    FsFile f = sd_.open(p, O_RDONLY);
-    CloseFile closeFile{f};
-    return f && f.sync() ? Ok : Io;
+    char canonical[PathSize];
+    Status s = canonicalize(p, canonical, sizeof(canonical));
+    return s == Ok ? (readFile_.sync() ? Ok : Io) : s;
   }
   Status space(Space &s) override {
     s = cachedSpace_;
@@ -430,17 +454,117 @@ public:
   }
 
 private:
-  static bool samePath(const char *a, const char *b) {
-    while (*a && *b) {
-      unsigned char x = *a++, y = *b++;
-      if (x >= 'A' && x <= 'Z')
-        x += 'a' - 'A';
-      if (y >= 'A' && y <= 'Z')
-        y += 'a' - 'A';
-      if (x != y)
-        return false;
+  // Indexed reopen recovers LFN state omitted when a FAT object is opened by its SFN.
+  Status canonicalize(const char *input, char *out, size_t cap, bool allowMissing = false,
+                      bool preserveLeaf = false) {
+    if (poison_)
+      return Io;
+    Status valid = name_detail::path(input, true);
+    if (valid != Ok)
+      return valid;
+    if (!out || cap < 2)
+      return NameTooLong;
+    cap = std::min(cap, PathSize);
+    if (SdFatVerifiers::reserved(input))
+      return Access;
+    if (!allowMissing && !preserveLeaf && readFile_ && !strcmp(input, readPath_)) {
+      if (strlen(readPath_) >= cap)
+        return NameTooLong;
+      memmove(out, readPath_, strlen(readPath_) + 1);
+      return Ok;
     }
-    return *a == *b;
+    char request[PathSize];
+    strcpy(request, input);
+    FsFile dir = sd_.open("/", O_RDONLY);
+    CloseFile closeDir{dir};
+    if (!dir)
+      return Io;
+    strcpy(out, "/");
+    size_t used = 1;
+    for (char *part = request + 1; *part;) {
+      char *next = strchr(part, '/');
+      if (next)
+        *next = 0;
+      FsFile file;
+      CloseFile closeFile{file};
+      if (!file.open(&dir, part, O_RDONLY)) {
+        if (dir.getError())
+          return Io;
+        if (!next && allowMissing) {
+          size_t n = strlen(part), sep = used > 1;
+          if (used + sep + n >= cap)
+            return NameTooLong;
+          if (sep)
+            out[used++] = '/';
+          memcpy(out + used, part, n + 1);
+          return SdFatVerifiers::reserved(out) ? Access : Ok;
+        }
+        return NoEnt;
+      }
+      uint32_t index = file.dirIndex();
+      file.close();
+      if (!dir.seekSet(uint64_t(index) * 32) || !file.open(&dir, index, O_RDONLY))
+        return Io;
+      if (!file.isFileOrSubDir())
+        return NotSupported;
+      char stored[PathSize];
+      size_t n = file.getName(stored, sizeof(stored));
+      if (!n || n >= sizeof(stored) - 1)
+        return file.getError() ? Io : NameTooLong;
+      valid = validateName(stored);
+      if (valid != Ok)
+        return valid;
+      size_t sep = used > 1;
+      if (used + sep + n >= cap)
+        return NameTooLong;
+      if (sep)
+        out[used++] = '/';
+      size_t leafAt = used;
+      memcpy(out + used, stored, n + 1);
+      used += n;
+      if (SdFatVerifiers::reserved(out))
+        return Access;
+      if (!next) {
+        if (preserveLeaf) {
+          n = strlen(part);
+          if (leafAt + n >= cap)
+            return NameTooLong;
+          memcpy(out + leafAt, part, n + 1);
+          return SdFatVerifiers::reserved(out) ? Access : Ok;
+        }
+        if (!allowMissing) {
+          readFile_.close();
+          readFile_.move(&file);
+          cacheAttributes(out);
+        }
+        return Ok;
+      }
+      if (!file.isDir())
+        return NotDir;
+      dir.close();
+      dir.move(&file);
+      part = next + 1;
+    }
+    if (!allowMissing) {
+      readFile_.close();
+      readFile_.move(&dir);
+      cacheAttributes(out);
+    }
+    return Ok;
+  }
+  void cacheAttributes(const char *path) {
+    FsFile &f = readFile_;
+    readAttr_ = Attr();
+    readAttr_.type = f.isDir() ? 2 : 1;
+    readAttr_.mode = f.isDir() ? 0777 : 0666;
+    if (f.attrib() & FS_ATTRIB_READ_ONLY)
+      readAttr_.mode &= ~0222;
+    readAttr_.size = readAttr_.used = f.isDir() ? 0 : f.fileSize();
+    uint16_t date = 0, time = 0;
+    if (f.getModifyDateTime(&date, &time))
+      readAttr_.atime.seconds = readAttr_.ctime.seconds = readAttr_.mtime.seconds =
+          dosTime(date, time);
+    strcpy(readPath_, path);
   }
   storage::SectorJournal *journal_ = nullptr;
   Remount remount_ = nullptr;

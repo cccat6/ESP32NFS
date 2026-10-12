@@ -7,6 +7,7 @@
 ## 功能
 
 - 通过 TCP 提供 NFSv3 和 MOUNT v3 服务，支持 Linux、macOS 客户端。
+- 支持中文与 UTF-8 名称，使用文件系统原生大小写规则统一长文件名和短别名身份。
 - 将多个设备、分区和文件系统映射为独立共享目录。
 - 接入 LittleFS、FAT32、exFAT，以及 RAM 内存文件和 ROM 固件资源。
 - 提供文件读写、目录遍历、随机访问、缓冲写入和同步操作。
@@ -18,7 +19,7 @@
 
 1. 在 Arduino 开发板管理器中安装 **esp32 by Espressif Systems**。
 2. 在库管理器中安装 **SdFat 2.3.0**。
-3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.1.0.zip**。
+3. 从 [Releases](https://github.com/cccat6/ESP32NFS/releases/latest) 下载 **ESP32NFS-1.1.1.zip**。
 4. 在 Arduino IDE 中选择 **项目 → 加载库 → 添加 .ZIP 库**，导入压缩包。
 5. 打开 **文件 → 示例 → ESP32NFS → LittleFSShare**，填写 Wi-Fi 信息后编译上传。
 
@@ -73,3 +74,5 @@ CI 覆盖 ESP32、S2、S3、C2、C3、C5、C6、C61、H2、P4，以及 Pico W �
 ## 许可证
 
 项目采用 [MIT License](LICENSE)。依赖说明见 [NOTICE.md](NOTICE.md)。
+
+[名称与文件身份](docs/names-and-identities.md)介绍 UTF-8 配置、规范路径 API 和文件租约接入。

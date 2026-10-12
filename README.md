@@ -11,6 +11,7 @@
 ## Features
 
 - NFSv3 and MOUNT v3 over TCP, with file access from Linux and macOS.
+- UTF-8 names with native filesystem case handling and unified long-name/short-alias identities.
 - Multiple named exports backed by separate devices, partitions and filesystems.
 - LittleFS, FAT32 and exFAT integration, plus memory-backed RAM and immutable ROM namespaces.
 - File and directory operations, random access, buffered writes and checked synchronization.
@@ -22,7 +23,7 @@
 
 1. Install **esp32 by Espressif Systems** through Arduino Boards Manager.
 2. Install **SdFat 2.3.0** through Arduino Library Manager.
-3. Download **ESP32NFS-1.1.0.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
+3. Download **ESP32NFS-1.1.1.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
 4. Choose **Sketch → Include Library → Add .ZIP Library** and select the archive.
 5. Open **File → Examples → ESP32NFS → LittleFSShare**.
 
@@ -30,7 +31,7 @@ ESP32NFS uses the Arduino library format. Arduino CLI also supports ZIP installa
 
 ```sh
 arduino-cli lib install 'SdFat@2.3.0'
-ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.1.0.zip
+ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.1.1.zip
 ```
 
 ## Share a filesystem
@@ -116,6 +117,7 @@ CI covers ESP32, S2, S3, C2, C3, C5, C6, C61, H2 and P4, plus Pico W and Pico 2 
 - [Getting started](docs/getting-started.md): board setup, filesystem initialization and mounting.
 - [Storage integration](docs/storage.md): backends, partitions, metadata and transaction setup.
 - [Driver interface](docs/driver-interface.md): integrate USB, SPI and virtual storage drivers.
+- [Names and identities](docs/names-and-identities.md): Unicode, canonical paths and file protection.
 - [API guide](docs/api.md): exports, server configuration and lifecycle.
 - [Performance configuration](docs/performance.md): scheduling, buffers and TCP settings.
 - [Release process](docs/releasing.md): GitHub Actions and Arduino Library Manager registration.

@@ -13,3 +13,5 @@ ESP32NFS original source is distributed under the MIT License.
 The protocol implementation follows [RFC 1813](https://www.rfc-editor.org/rfc/rfc1813) and [RFC 5531](https://www.rfc-editor.org/rfc/rfc5531). The original SHA-256 implementation follows FIPS 180-4.
 
 Dependencies are installed through the platform and library toolchains. Preserve their supplied notices when distributing linked firmware.
+
+CI uses [libnfs 8.0.0](https://github.com/sahlberg/libnfs) as an independent LGPL-2.1 client, fetched into the runner workspace.
