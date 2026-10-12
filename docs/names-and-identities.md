@@ -4,9 +4,10 @@ ESP32NFS accepts valid UTF-8 file and directory names. Chinese names, mixed scri
 
 ## Ready-to-use UTF-8 storage
 
-Include `<backends/SdFatStorage.h>` and construct a `SdFatCard` or `SdFatVolume`. ESP32NFS supplies a consistently configured UTF-8 filesystem implementation. Arduino IDE and Arduino CLI build it with their standard settings.
+Include `<ESP32NFS.h>` and `<backends/SdFatStorage.h>` and construct a `SdFatCard` or `SdFatVolume`. ESP32NFS supplies a consistently configured UTF-8 filesystem implementation. Arduino IDE and Arduino CLI build it with their standard settings.
 
 ```cpp
+#include <ESP32NFS.h>
 #include <backends/SdFatStorage.h>
 using namespace esp32_nfs;
 SdFatCard card;

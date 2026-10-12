@@ -678,6 +678,7 @@ bool FatFile::openNext(FatFile* dirFile, oflag_t oflag) {
       lfnOrd = 0;
     } else if (isFatFileOrSubdir(dir)) {
       if (lfnOrd && checksum != lfnChecksum(dir->name)) {
+        dirFile->m_error |= READ_ERROR;
         DBG_FAIL_MACRO;
         goto fail;
       }

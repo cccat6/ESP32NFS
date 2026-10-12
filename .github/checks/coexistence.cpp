@@ -1,4 +1,5 @@
 // Compile both filesystem implementations with the dependency's default name configuration.
+#include <ESP32NFS.h>
 #include <SdFat.h>
 #include <backends/SdFatStorage.h>
 #if defined(ARDUINO_ARCH_ESP32)

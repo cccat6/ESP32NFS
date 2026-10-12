@@ -342,6 +342,7 @@ bool FatFile::open(FatFile* dirFile, FatLfn_t* fname, oflag_t oflag) {
       }
     } else if (isFatFileOrSubdir(dir)) {
       if (lfnOrd && (order != 1 || lfnChecksum(dir->name) != checksum)) {
+        dirFile->m_error |= READ_ERROR;
         DBG_FAIL_MACRO;
         goto fail;
       }

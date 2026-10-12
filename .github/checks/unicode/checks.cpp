@@ -25,6 +25,32 @@ static void path(PathVfs &fs, uint64_t id, const char *expected) {
   assert(!strcmp(canonical, expected));
 }
 int checks() {
+  {
+    // A damaged LFN chain reports an I/O error during lookup and enumeration.
+    Fixture f(false, false);
+    assert(f.volume.mkdir("/damaged", false));
+    auto file = f.volume.open("/damaged/Damaged_中文.txt", O_CREAT | O_RDWR);
+    assert(file && file.dirIndex() > 0);
+    auto root = f.volume.open("/damaged", O_RDONLY);
+    uint32_t preceding = file.dirIndex();
+    uint32_t sector = root.firstSector() + preceding / 16;
+    uint32_t offset = (preceding % 16) * 32;
+    file.close();
+    root.close();
+    f.volume.end();
+    uint8_t bytes[512];
+    assert(f.disk.readSector(sector, bytes));
+    assert(bytes[offset + 11] != 0x0f);
+    bytes[offset] ^= 1;
+    assert(f.disk.writeSector(sector, bytes) && f.disk.syncDevice());
+    assert(f.volume.begin(&f.disk, false, 1));
+    Attr a;
+    char name[PathSize];
+    bool eof = false;
+    assert(f.backend.resolve("/damaged/Damaged_中文.txt", name, sizeof(name), a) == Io);
+    assert(f.backend.entry("/damaged", 0, name, sizeof(name), eof) == Io);
+  }
+
   for (bool exfat : {false, true})
     for (bool transactional : {false, true}) {
       Fixture f(exfat, transactional);
