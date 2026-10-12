@@ -1,13 +1,13 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "../ESP32NFS.h"
-#include <SdFat.h>
+#include "SdFatVolume.h"
 namespace esp32_nfs {
 // Transaction-protected EXCLUSIVE CREATE verifiers. No permissions, owners or timestamp database.
 class SdFatVerifiers {
 public:
   static constexpr uint32_t MaxRecords = 64;
-  explicit SdFatVerifiers(FsVolume &volume) : volume_(volume) {}
+  explicit SdFatVerifiers(SdFatVolume &volume) : volume_(volume) {}
   ~SdFatVerifiers() {
     delete[] index_;
   }
@@ -31,7 +31,7 @@ public:
   static bool reserved(const char *);
 
 private:
-  FsVolume &volume_;
+  SdFatVolume &volume_;
   bool loaded_ = false;
   uint32_t count_ = 0;
   struct Index {

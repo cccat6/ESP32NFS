@@ -17,8 +17,8 @@
 #define NFS_EXAMPLE_CS SS
 #endif
 using namespace esp32_nfs;
-SdFs media; // Owns the physical SD card driver; do not mount a second cache for the same partition.
-FsVolume partition1, partition2;
+SdFatCard media; // Owns the physical SD card driver; do not mount a second cache for the same partition.
+SdFatVolume partition1, partition2;
 SemaphoreHandle_t busMutex;
 class BusLease : public Lease {
   bool acquire() override {
@@ -63,9 +63,9 @@ void setup() {
   xSemaphoreTake(busMutex, portMAX_DELAY);
   if (media.cardBegin(SdSpiConfig(NFS_EXAMPLE_CS, SHARED_SPI, SD_SCK_MHZ(12), &SPI))) {
     // Explicit MBR partition numbers. An absent/unsupported filesystem is not exported.
-    if (partition1.begin(media.card(), false, 1) && storage1.refreshSpace())
+    if (partition1.begin(media.blockDevice(), false, 1) && storage1.refreshSpace())
       exports.add("/sd/1", volume1, false, &sdLease);
-    if (partition2.begin(media.card(), false, 2) && storage2.refreshSpace())
+    if (partition2.begin(media.blockDevice(), false, 2) && storage2.refreshSpace())
       exports.add("/sd/2", volume2, false, &sdLease);
   }
   xSemaphoreGive(busMutex);

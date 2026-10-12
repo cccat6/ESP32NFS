@@ -16,7 +16,7 @@ using namespace esp32_nfs;
 #define NFS_EXAMPLE_CS SS
 #endif
 // These defaults are intentionally portable. Set Wi-Fi credentials and the board's CS locally.
-SdFs sd;
+SdFatCard sd;
 SemaphoreHandle_t busMutex;
 class BusLease : public Lease {
   bool acquire() override {

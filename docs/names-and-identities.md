@@ -2,27 +2,26 @@
 
 ESP32NFS accepts valid UTF-8 file and directory names. Chinese names, mixed scripts, accented letters and supplementary characters share the same file operations and directory enumeration APIs.
 
-## SdFat configuration
+## Ready-to-use UTF-8 storage
 
-Build the application, ESP32NFS and SdFat 2.3.0 with these definitions:
+Include `<ESP32NFS.h>` and `<backends/SdFatStorage.h>` and construct a `SdFatCard` or `SdFatVolume`. ESP32NFS supplies a consistently configured UTF-8 filesystem implementation. Arduino IDE and Arduino CLI build it with their standard settings.
 
-```text
--DUSE_LONG_FILE_NAMES=1 -DUSE_UTF8_LONG_NAMES=1
+```cpp
+#include <ESP32NFS.h>
+#include <backends/SdFatStorage.h>
+using namespace esp32_nfs;
+SdFatCard card;
+SdFatStorage storage(card);
+PathVfs files(storage);
+// During setup, under the application's bus lease:
+// card.begin(SdSpiConfig(csPin, SHARED_SPI, SD_SCK_MHZ(12), &SPI));
 ```
 
-The ESP32 SD examples include `build_opt.h` with these options. For Arduino CLI, including Pico builds, pass them through the C++ build properties:
-
-```sh
-arduino-cli compile --fqbn rp2040:rp2040:rpipicow \
-  --build-property 'compiler.cpp.extra_flags=-DUSE_LONG_FILE_NAMES=1 -DUSE_UTF8_LONG_NAMES=1' \
-  --library /path/to/ESP32NFS /path/to/ESP32NFS/examples/PicoSdCardShare
-```
-
-Append these definitions to an application's existing build flags. Apply them to every translation unit, including SdFat's source files. `SdFatStorage` checks the configuration at compilation.
+`SdFatCard` combines the card transport and a volume. `SdFatVolume` mounts a caller-owned generic block device, including the transactional block adapter. Multiple partitions share `card.blockDevice()` and use separate volume objects. Ordinary SdFat objects can coexist in the same application; each mounted volume has one active filesystem owner.
 
 ## Stored spelling and comparison
 
-FAT long names and exFAT names are read through SdFat's UTF-8 interface. Name lookup uses the backend's own comparison rules. `SdFatStorage` resolves each directory component and obtains its stored name by directory-entry index, including when a request uses a FAT 8.3 alias.
+FAT long names and exFAT names are read through SdFat's UTF-8 interface. Name lookup uses the backend's own comparison rules. `SdFatStorage` resolves each directory component and obtains its stored name in one scan, including when a request uses a FAT 8.3 alias.
 
 The backend uses SdFat 2.3.0's built-in Unicode upcase mapping for comparisons. This is the mapping used by that dependency's FAT/exFAT lookup and name hashing. It also defines the library's explicit case-only rename behavior. The [exFAT specification](https://learn.microsoft.com/en-us/windows/win32/fileio/exfat-specification) describes the volume upcase table; SdFat's matching implementation uses its compiled mapping.
 

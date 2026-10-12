@@ -61,8 +61,13 @@ jobs:
           BOARD: ${{ matrix.board }}
         run: |
           for sketch in LittleFSShare SdCardShare MappedVolumes MemoryShares; do
-            arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
+            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
           done
+          if [ "$BOARD" = esp32c3 ]; then
+            mkdir -p "$RUNNER_TEMP/Coexistence"
+            cp .github/checks/coexistence.cpp "$RUNNER_TEMP/Coexistence/Coexistence.ino"
+            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/Coexistence"
+          fi
 
   esp32-network:
     name: ESP32 network/storage (${{ matrix.board }})
@@ -101,7 +106,7 @@ jobs:
           void setup() { server.begin(transport, Config(), 1); }
           void loop() { server.poll(millis()); delay(1); }
           CPP
-          arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/NetworkBuild"
+          arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/NetworkBuild"
 
   esp32-source-sdk:
     name: ESP-IDF (${{ matrix.target }})
@@ -183,8 +188,11 @@ jobs:
           BOARD: ${{ matrix.board }}
         run: |
           for sketch in PicoWShare PicoSdCardShare; do
-            arduino-cli compile --build-property "compiler.cpp.extra_flags=-DUSE_UTF8_LONG_NAMES=1 -DUSE_LONG_FILE_NAMES=1" --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "examples/$sketch"
+            arduino-cli compile --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "examples/$sketch"
           done
+          mkdir -p "$RUNNER_TEMP/Coexistence"
+          cp .github/checks/coexistence.cpp "$RUNNER_TEMP/Coexistence/Coexistence.ino"
+          arduino-cli compile --fqbn "rp2040:rp2040:$BOARD" --library "$PWD" --library "$HOME/Arduino/libraries/SdFat" "$RUNNER_TEMP/Coexistence"
 
   unicode:
     name: UTF-8 and file identities

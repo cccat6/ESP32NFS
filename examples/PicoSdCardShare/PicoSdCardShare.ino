@@ -9,7 +9,7 @@ using namespace esp32_nfs;
 const char *WifiSsid = "YOUR_WIFI_SSID";
 const char *WifiPassword = "YOUR_WIFI_PASSWORD";
 constexpr uint8_t CardCS = SS;
-SdFs sd;
+SdFatCard sd;
 SdFatStorage sdStorage(sd);
 PathVfs files(sdStorage);
 PicoWiFiTransport transport;

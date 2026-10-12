@@ -64,7 +64,7 @@ struct Fixture {
   SectorJournal journal{base, 0, Sectors, Sectors};
   BlockIo tx{journal};
   SdFatBlockAdapter disk{tx, &journal};
-  FsVolume volume;
+  SdFatVolume volume;
   SdFatStorage backend{volume};
   PathVfs fs{backend};
   static bool remount(void *p) {
@@ -76,10 +76,10 @@ struct Fixture {
     assert(journal.formatJournal() == Error::Ok);
     uint8_t scratch[512];
     if (exfat) {
-      ExFatFormatter f;
+      fat::ExFatFormatter f;
       assert(f.format(&disk, scratch, nullptr));
     } else {
-      FatFormatter f;
+      fat::FatFormatter f;
       assert(f.format(&disk, scratch, nullptr));
     }
     assert(volume.begin(&disk, false, 1));
@@ -87,13 +87,13 @@ struct Fixture {
       backend.attachTransactions(journal, remount, this);
   }
   std::string alias(const char *path) {
-    FsFile file = volume.open(path, O_RDONLY);
+    fat::FsBaseFile file = volume.open(path, O_RDONLY);
     assert(file);
     std::string parent = path;
     parent.resize(parent.rfind('/'));
     if (parent.empty())
       parent = "/";
-    FsFile dir = volume.open(parent.c_str(), O_RDONLY);
+    fat::FsBaseFile dir = volume.open(parent.c_str(), O_RDONLY);
     assert(dir);
     assert(dir.seekSet(uint64_t(file.dirIndex()) * 32));
     uint8_t record[32];
