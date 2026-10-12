@@ -43,6 +43,8 @@ if (status == Ok) {
 }
 ```
 
+The identity index grows on demand, shares directory prefixes, and uses hash indexes for lookup. `releaseCaches()` preserves file identities; deletion retires the affected identity and ending a session releases the index.
+
 `resolvePath()` accepts an absolute path with explicit components. `canonicalPath()` returns the registered stored spelling for a live file identity. Long names, short aliases and native case aliases converge on one ID and one path. IDs remain associated with the object during library-managed file or directory renames. Deletion retires the ID, and a new object receives a new ID.
 
 Scope IDs to the owning `PathVfs` instance and filesystem session. Multiple export aliases can share that same `PathVfs`. Canonical-path policies include the underlying volume/root identity in their key. External namespace mutations and remounts use `invalidateAll()` before service resumes; this refreshes identities and cached paths for the new namespace state.

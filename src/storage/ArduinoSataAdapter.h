@@ -25,7 +25,7 @@ public:
     return g;
   }
   Result start(const Request &r) override {
-    if (!clock_)
+    if (!clock_ || (r.operation != Operation::Read && r.operation != Operation::Write && r.operation != Operation::Flush))
       return {Error::Invalid};
     uint32_t now = clock_(context_);
     arduino_sata::Status status;
@@ -40,6 +40,7 @@ public:
     return status == arduino_sata::Status::Ok ? poll() : Result{convert(status)};
   }
   Result poll() override {
+    if (!clock_) return {Error::Invalid};
     auto done = drive_.poll(clock_(context_));
     return {convert(done.status), done.sectors,
             done.durability == arduino_sata::Durability::Flushed};

@@ -76,10 +76,10 @@ struct Fixture {
     assert(journal.formatJournal() == Error::Ok);
     uint8_t scratch[512];
     if (exfat) {
-      fat::ExFatFormatter f;
+      ::ExFatFormatter f;
       assert(f.format(&disk, scratch, nullptr));
     } else {
-      fat::FatFormatter f;
+      ::FatFormatter f;
       assert(f.format(&disk, scratch, nullptr));
     }
     assert(volume.begin(&disk, false, 1));

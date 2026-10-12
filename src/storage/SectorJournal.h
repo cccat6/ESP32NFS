@@ -69,3 +69,5 @@ private:
 };
 } // namespace storage
 } // namespace esp32_nfs
+
+#include "SectorJournal.ipp"

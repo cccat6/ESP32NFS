@@ -129,16 +129,6 @@ class ExFatPartition {
   uint8_t sectorsPerClusterShift() const { return m_sectorsPerClusterShift; }
   //----------------------------------------------------------------------------
 #ifndef DOXYGEN_SHOULD_SKIP_THIS
-  void checkUpcase(print_t* pr);
-  bool printDir(print_t* pr, ExFatFile* file);
-  void dmpBitmap(print_t* pr);
-  void dmpCluster(print_t* pr, uint32_t cluster, uint32_t offset,
-                  uint32_t count);
-  void dmpFat(print_t* pr, uint32_t start, uint32_t count);
-  void dmpSector(print_t* pr, uint32_t sector);
-  bool printVolInfo(print_t* pr);
-  void printFat(print_t* pr);
-  void printUpcase(print_t* pr);
 #endif  // DOXYGEN_SHOULD_SKIP_THIS
   //----------------------------------------------------------------------------
  private:

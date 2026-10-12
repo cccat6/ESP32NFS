@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -30,15 +31,15 @@
 namespace esp32_nfs { namespace fat {
 #if FILE_COPY_CONSTRUCTOR_SELECT
 //------------------------------------------------------------------------------
-FsBaseFile::FsBaseFile(const FsBaseFile& from) { copy(&from); }
+inline FsBaseFile::FsBaseFile(const FsBaseFile& from) { copy(&from); }
 //------------------------------------------------------------------------------
-FsBaseFile& FsBaseFile::operator=(const FsBaseFile& from) {
+inline FsBaseFile& FsBaseFile::operator=(const FsBaseFile& from) {
   copy(&from);
   return *this;
 }
 #endif  // FILE_COPY_CONSTRUCTOR_SELECT
 //------------------------------------------------------------------------------
-void FsBaseFile::copy(const FsBaseFile* from) {
+inline void FsBaseFile::copy(const FsBaseFile* from) {
   if (from != this) {
     m_fFile = nullptr;
     m_xFile = nullptr;
@@ -52,7 +53,7 @@ void FsBaseFile::copy(const FsBaseFile* from) {
   }
 }
 //------------------------------------------------------------------------------
-void FsBaseFile::move(FsBaseFile* from) {
+inline void FsBaseFile::move(FsBaseFile* from) {
   if (from != this) {
     copy(from);
     from->m_fFile = nullptr;
@@ -60,14 +61,14 @@ void FsBaseFile::move(FsBaseFile* from) {
   }
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::close() {
+inline bool FsBaseFile::close() {
   bool rtn = m_fFile ? m_fFile->close() : m_xFile ? m_xFile->close() : true;
   m_fFile = nullptr;
   m_xFile = nullptr;
   return rtn;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::mkdir(FsBaseFile* dir, const char* path, bool pFlag) {
+inline bool FsBaseFile::mkdir(FsBaseFile* dir, const char* path, bool pFlag) {
   close();
   if (dir->m_fFile) {
     m_fFile = new (m_fileMem) FatFile;
@@ -85,7 +86,7 @@ bool FsBaseFile::mkdir(FsBaseFile* dir, const char* path, bool pFlag) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::open(FsVolume* vol, const char* path, oflag_t oflag) {
+inline bool FsBaseFile::open(FsVolume* vol, const char* path, oflag_t oflag) {
   if (!vol) {
     return false;
   }
@@ -106,7 +107,7 @@ bool FsBaseFile::open(FsVolume* vol, const char* path, oflag_t oflag) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::open(FsBaseFile* dir, const char* path, oflag_t oflag) {
+inline bool FsBaseFile::open(FsBaseFile* dir, const char* path, oflag_t oflag) {
   close();
   if (dir->m_fFile) {
     m_fFile = new (m_fileMem) FatFile;
@@ -124,7 +125,7 @@ bool FsBaseFile::open(FsBaseFile* dir, const char* path, oflag_t oflag) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::open(FsBaseFile* dir, uint32_t index, oflag_t oflag) {
+inline bool FsBaseFile::open(FsBaseFile* dir, uint32_t index, oflag_t oflag) {
   close();
   if (dir->m_fFile) {
     m_fFile = new (m_fileMem) FatFile;
@@ -142,15 +143,15 @@ bool FsBaseFile::open(FsBaseFile* dir, uint32_t index, oflag_t oflag) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::openCwd() {
+inline bool FsBaseFile::openCwd() {
   close();
-  if (FsVolume::m_cwv && FsVolume::m_cwv->m_fVol) {
+  if (FsVolume::currentVolume() && FsVolume::currentVolume()->m_fVol) {
     m_fFile = new (m_fileMem) FatFile;
     if (m_fFile->openCwd()) {
       return true;
     }
     m_fFile = nullptr;
-  } else if (FsVolume::m_cwv && FsVolume::m_cwv->m_xVol) {
+  } else if (FsVolume::currentVolume() && FsVolume::currentVolume()->m_xVol) {
     m_xFile = new (m_fileMem) ExFatFile;
     if (m_xFile->openCwd()) {
       return true;
@@ -160,7 +161,7 @@ bool FsBaseFile::openCwd() {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::openNext(FsBaseFile* dir, oflag_t oflag) {
+inline bool FsBaseFile::openNext(FsBaseFile* dir, oflag_t oflag) {
   close();
   if (dir->m_fFile) {
     m_fFile = new (m_fileMem) FatFile;
@@ -178,7 +179,7 @@ bool FsBaseFile::openNext(FsBaseFile* dir, oflag_t oflag) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::openRoot(FsVolume* vol) {
+inline bool FsBaseFile::openRoot(FsVolume* vol) {
   if (!vol) {
     return false;
   }
@@ -199,7 +200,7 @@ bool FsBaseFile::openRoot(FsVolume* vol) {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::remove() {
+inline bool FsBaseFile::remove() {
   if (m_fFile) {
     if (m_fFile->remove()) {
       m_fFile = nullptr;
@@ -214,7 +215,7 @@ bool FsBaseFile::remove() {
   return false;
 }
 //------------------------------------------------------------------------------
-bool FsBaseFile::rmdir() {
+inline bool FsBaseFile::rmdir() {
   if (m_fFile) {
     if (m_fFile->rmdir()) {
       m_fFile = nullptr;

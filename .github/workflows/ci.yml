@@ -13,7 +13,7 @@ jobs:
   lint:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Select Arduino registry mode
         id: registry
         run: |
@@ -26,8 +26,9 @@ jobs:
           with open(os.environ['GITHUB_OUTPUT'], 'a') as output:
               output.write('mode=' + ('update' if found else 'submit') + '\n')
           PY
-      - uses: arduino/arduino-lint-action@v3
+      - uses: arduino/arduino-lint-action@9a3603836c75e41753e531167395edeb90ba5dae # v3.0.0
         with:
+          version: 1.3.0
           compliance: strict
           library-manager: ${{ steps.registry.outputs.mode }}
       - name: Verify distribution layout
@@ -49,8 +50,10 @@ jobs:
       matrix:
         board: [esp32, esp32s2, esp32s3, esp32c3, esp32c5, esp32c6]
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+        with:
+          version: 1.5.1
       - name: Install ESP32 platform and dependencies
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -61,9 +64,11 @@ jobs:
           BOARD: ${{ matrix.board }}
         run: |
           for sketch in LittleFSShare SdCardShare MappedVolumes MemoryShares; do
-            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "examples/$sketch"
+            arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" --build-path "$RUNNER_TEMP/build-$sketch" "examples/$sketch"
           done
           if [ "$BOARD" = esp32c3 ]; then
+            tool=$(find "$HOME/.arduino15/packages/esp32/tools/esp-rv32" -name riscv32-esp-elf-nm -type f | head -1)
+            python3 .github/checks/verify_selection.py "$RUNNER_TEMP/build-MemoryShares" "$tool"
             mkdir -p "$RUNNER_TEMP/Coexistence"
             cp .github/checks/coexistence.cpp "$RUNNER_TEMP/Coexistence/Coexistence.ino"
             arduino-cli compile --fqbn "esp32:esp32:$BOARD" --library "$PWD" "$RUNNER_TEMP/Coexistence"
@@ -77,8 +82,10 @@ jobs:
       matrix:
         board: [esp32h2, esp32p4]
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+        with:
+          version: 1.5.1
       - name: Install ESP32 platform and dependencies
         run: |
           arduino-cli core update-index --additional-urls https://espressif.github.io/arduino-esp32/package_esp32_index.json
@@ -92,7 +99,6 @@ jobs:
           cat > "$RUNNER_TEMP/NetworkBuild/NetworkBuild.ino" <<'CPP'
           #include <ESP32NFS.h>
           #include <backends/LittleFsStorage.h>
-          #include <backends/SdFatStorage.h>
           #include <backends/RamVfs.h>
           #include <backends/RomVfs.h>
           #include <storage/Partitions.h>
@@ -117,7 +123,7 @@ jobs:
       matrix:
         target: [esp32c2, esp32c61]
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build core, TCP transport and storage interfaces
         shell: bash
         env:
@@ -133,9 +139,7 @@ jobs:
           project(esp32nfs_native)
           CMAKE
           cat > "$project/main/CMakeLists.txt" <<'CMAKE'
-          file(GLOB NFS_SOURCES "$ENV{LIBRARY_ROOT}/src/*.cpp"
-               "$ENV{LIBRARY_ROOT}/src/storage/*.cpp"
-               "$ENV{LIBRARY_ROOT}/src/backends/PathVfs.cpp")
+          file(GLOB NFS_SOURCES "$ENV{LIBRARY_ROOT}/src/*.cpp")
           idf_component_register(SRCS "main.cpp" ${NFS_SOURCES}
               INCLUDE_DIRS "$ENV{LIBRARY_ROOT}/src"
               REQUIRES lwip esp_netif freertos esp_hw_support)
@@ -176,8 +180,10 @@ jobs:
       matrix:
         board: [rpipicow, rpipico2w]
     steps:
-      - uses: actions/checkout@v7
-      - uses: arduino/setup-arduino-cli@v2
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
+      - uses: arduino/setup-arduino-cli@81d310742121c928ea9c8bbd407b4217b432ae02 # v2.0.0
+        with:
+          version: 1.5.1
       - name: Install Arduino-Pico and SdFat
         run: |
           arduino-cli core update-index --additional-urls https://github.com/earlephilhower/arduino-pico/releases/download/global/package_rp2040_index.json
@@ -198,11 +204,13 @@ jobs:
     name: UTF-8 and file identities
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v7
+      - uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7
       - name: Build filesystem and independent client dependencies
         run: |
           git clone --branch 2.3.0 --depth 1 https://github.com/greiman/SdFat.git "$RUNNER_TEMP/SdFat"
+          test "$(git -C "$RUNNER_TEMP/SdFat" rev-parse HEAD)" = 67e26476f15a3bae5f390d91b6cc01830920c55d
           git clone --branch libnfs-8.0.0 --depth 1 https://github.com/sahlberg/libnfs.git "$RUNNER_TEMP/libnfs"
+          test "$(git -C "$RUNNER_TEMP/libnfs" rev-parse HEAD)" = 5b1bc60260b5ddac34900c5315010b88b73e7edd
           cmake -S "$RUNNER_TEMP/libnfs" -B "$RUNNER_TEMP/libnfs-build" -DBUILD_SHARED_LIBS=ON -DENABLE_UTILS=OFF -DENABLE_TESTS=OFF
           cmake --build "$RUNNER_TEMP/libnfs-build" --parallel 2
       - name: Check FAT32/exFAT names, aliases and native NFS client

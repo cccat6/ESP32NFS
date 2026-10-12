@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatFileLFN.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -36,9 +39,9 @@ namespace esp32_nfs { namespace fat {
 #include "FatLib.h"
 namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
-static bool isLower(char c) { return 'a' <= c && c <= 'z'; }
+inline bool isLower(char c) { return 'a' <= c && c <= 'z'; }
 //------------------------------------------------------------------------------
-static bool isUpper(char c) { return 'A' <= c && c <= 'Z'; }
+inline bool isUpper(char c) { return 'A' <= c && c <= 'Z'; }
 //------------------------------------------------------------------------------
 // A bit smaller than toupper in AVR 328.
 inline char toUpper(char c) { return isLower(c) ? c - 'a' + 'A' : c; }
@@ -50,7 +53,7 @@ inline char toUpper(char c) { return isLower(c) ? c - 'a' + 'A' : c; }
  * \param[in] i Index of character.
  * \param[in] c The 16-bit character.
  */
-static void putLfnChar(DirLfn_t* ldir, uint8_t i, uint16_t c) {
+inline void putLfnChar(DirLfn_t* ldir, uint8_t i, uint16_t c) {
   if (i < 5) {
     setLe16(ldir->unicode1 + 2 * i, c);
   } else if (i < 11) {
@@ -60,7 +63,7 @@ static void putLfnChar(DirLfn_t* ldir, uint8_t i, uint16_t c) {
   }
 }
 //==============================================================================
-bool FatFile::cmpName(uint16_t index, FatLfn_t* fname, uint8_t lfnOrd) {
+inline bool FatFile::cmpName(uint16_t index, FatLfn_t* fname, uint8_t lfnOrd) {
   FatFile dir;
   dir.copy(this);
   const DirLfn_t* ldir;
@@ -93,7 +96,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::createLFN(uint16_t index, FatLfn_t* fname, uint8_t lfnOrd) {
+inline bool FatFile::createLFN(uint16_t index, FatLfn_t* fname, uint8_t lfnOrd) {
   FatFile dir;
   dir.copy(this);
   DirLfn_t* ldir;
@@ -131,7 +134,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::makeSFN(FatLfn_t* fname) {
+inline bool FatFile::makeSFN(FatLfn_t* fname) {
   bool is83;
   //  char c;
   uint8_t c;
@@ -216,7 +219,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::makeUniqueSfn(FatLfn_t* fname) {
+inline bool FatFile::makeUniqueSfn(FatLfn_t* fname) {
   const uint8_t FIRST_HASH_SEQ = 2;  // min value is 2
   uint8_t pos = fname->seqPos;
   const DirFat_t* dir;
@@ -268,7 +271,7 @@ done:
   return true;
 }
 //------------------------------------------------------------------------------
-bool FatFile::open(FatFile* dirFile, FatLfn_t* fname, oflag_t oflag) {
+inline bool FatFile::open(FatFile* dirFile, FatLfn_t* fname, oflag_t oflag) {
   bool fnameFound = false;
   bool longMatch = false;
   uint8_t lfnOrd = 0;
@@ -455,7 +458,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::parsePathName(const char* path, FatLfn_t* fname,
+inline bool FatFile::parsePathName(const char* path, FatLfn_t* fname,
                             const char** ptr) {
   size_t len = 0;
   // Skip leading spaces.
@@ -497,7 +500,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::remove() {
+inline bool FatFile::remove() {
   bool last;
   uint8_t checksum;
   FatFile dirFile;
@@ -571,3 +574,5 @@ fail:
   return false;
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

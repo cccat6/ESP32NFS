@@ -23,7 +23,7 @@
 
 1. Install **esp32 by Espressif Systems** through Arduino Boards Manager.
 2. Install **SdFat 2.3.0** through Arduino Library Manager.
-3. Download **ESP32NFS-1.2.0.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
+3. Download **ESP32NFS-1.3.0.zip** from [Releases](https://github.com/cccat6/ESP32NFS/releases/latest).
 4. Choose **Sketch → Include Library → Add .ZIP Library** and select the archive.
 5. Open **File → Examples → ESP32NFS → LittleFSShare**.
 
@@ -31,7 +31,7 @@ ESP32NFS uses the Arduino library format. Arduino CLI also supports ZIP installa
 
 ```sh
 arduino-cli lib install 'SdFat@2.3.0'
-ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.2.0.zip
+ARDUINO_LIBRARY_ENABLE_UNSAFE_INSTALL=true arduino-cli lib install --zip-path ESP32NFS-1.3.0.zip
 ```
 
 ## Share a filesystem

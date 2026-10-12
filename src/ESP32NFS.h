@@ -1,15 +1,10 @@
 // SPDX-License-Identifier: MIT
 #pragma once
 #include "ExportMap.h"
+#include "Memory.h"
 #include <stddef.h>
 #include <stdint.h>
 
-#ifndef ESP32_NFS_BLOCK_SIZE
-#define ESP32_NFS_BLOCK_SIZE 4096
-#endif
-#ifndef ESP32_NFS_HANDLE_COUNT
-#define ESP32_NFS_HANDLE_COUNT 16
-#endif
 #ifndef ESP32_NFS_REPLAY_COUNT
 #define ESP32_NFS_REPLAY_COUNT 4
 #endif
@@ -18,11 +13,11 @@
 #endif
 
 namespace esp32_nfs {
-static constexpr size_t BlockSize = ESP32_NFS_BLOCK_SIZE;
+static constexpr size_t BlockSize = 4096;
+static constexpr size_t MaxBlockSize = 32768;
 static constexpr size_t RecordSize = BlockSize + 512;
 static constexpr size_t PathSize = 256;
 static constexpr size_t ReplayReplySize = 384;
-static_assert(BlockSize >= 512 && BlockSize <= 32768, "Block size out of bounds");
 static_assert(ESP32_NFS_REPLAY_COUNT > 0, "Mutating RPCs require replay slots");
 static_assert(ESP32_NFS_CONNECTION_COUNT > 0, "At least one connection required");
 
@@ -126,7 +121,9 @@ public:
   virtual bool canSetTimes() const {
     return false;
   }
-  virtual void endSession() {}
+  virtual Status endSession() {
+    return Ok;
+  }
 };
 struct Config {
   const char *exportPath = "/"; // Copied by begin().
@@ -134,9 +131,9 @@ struct Config {
   bool portmapper = false; // Optional PMAP v2 TCP dispatch on the same listener.
   uint16_t port = 2049;
   uint32_t blockSize = BlockSize;
-  uint32_t bytesPerSecond = 128 * 1024; // 0 disables the token bucket.
-  uint32_t ioBytesPerPoll = 2048;
-  uint32_t directoryEntriesPerRpc = 4;
+  uint32_t bytesPerSecond = 0; // 0 disables the token bucket.
+  uint32_t ioBytesPerPoll = 8192;
+  uint32_t directoryEntriesPerRpc = 16;
   uint32_t idleTimeoutMs = 30000, recordTimeoutMs = 5000, replayWindowMs = 60000;
   uint8_t connections = ESP32_NFS_CONNECTION_COUNT;
 };
@@ -155,13 +152,13 @@ public:
 };
 struct Metrics {
   uint64_t received = 0, sent = 0;
-  uint32_t requests = 0, replayHits = 0, rejected = 0, timeouts = 0;
+  uint32_t requests = 0, replayHits = 0, rejected = 0, timeouts = 0, memoryFailures = 0;
   size_t ownedHeap = 0, peakOwnedHeap = 0;
 };
 class Server {
 public:
-  explicit Server(Vfs &, Lease *lease = nullptr);
-  explicit Server(ExportMap &, Lease *defaultLease = nullptr);
+  explicit Server(Vfs &, Lease *lease = nullptr, Memory &memory = defaultMemory());
+  explicit Server(ExportMap &, Lease *defaultLease = nullptr, Memory &memory = defaultMemory());
   ExportMap &exports() {
     return *exports_;
   }
@@ -171,14 +168,20 @@ public:
   // epoch MUST change after restart, remount, or lost writes. Nonzero random boot nonce
   // recommended.
   bool begin(Transport &, const Config &, uint64_t epoch);
-  void stop();
+  Status stop();
+  Status lastStatus() const {
+    return lastStatus_;
+  }
+  bool unmount(const char *path) {
+    return exports_->remove(path, lease_);
+  }
   // Cooperative, bounded network work. One storage RPC per poll; SD latency is backend-dependent.
   void poll(uint32_t nowMs);
   uint32_t suggestedWaitMs() const;
   const Metrics &metrics() const {
     return metrics_;
   }
-  static size_t activeWorkspaceBytes();
+  static size_t activeWorkspaceBytes(size_t payload = BlockSize);
   // Host/fuzz harness: execute an unframed RPC. Same bounded replay cache as TCP.
   size_t rpc(const uint8_t *, size_t, uint8_t *, size_t, uint64_t peer, uint32_t nowMs);
 
@@ -193,6 +196,9 @@ private:
     bool finalFragment = false;
     size_t received = 0, sending = 0, replyLength = 0;
   };
+  Memory &memory_;
+  Status lastStatus_ = Ok;
+  bool stopPending_ = false;
   Vfs *defaultVfs_;
   ExportMap ownExports_;
   ExportMap *exports_;
@@ -210,6 +216,7 @@ private:
   unsigned nextConnection_ = 0;
   uint32_t tokenTime_ = 0, tokens_ = 0, tokenFraction_ = 0;
   bool ensureWorkspace();
+  void releaseWorkspace(bool buffersOnly = false);
   void drop(unsigned);
   size_t dispatch(const uint8_t *, size_t, uint8_t *, size_t);
 };

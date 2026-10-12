@@ -288,7 +288,6 @@ class FatFile {
    * \param[in] pos Start position in file.
    * \param[in] n number of locations to dump.
    */
-  void dmpFile(print_t* pr, uint32_t pos, size_t n);
   /** Test for the existence of a file in a directory
    *
    * \param[in] path Path of the file to be tested for.

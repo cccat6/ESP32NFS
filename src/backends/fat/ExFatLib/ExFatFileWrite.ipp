@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "ExFatFileWrite.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -35,28 +38,28 @@ namespace esp32_nfs { namespace fat {
 namespace esp32_nfs { namespace fat {
 //==============================================================================
 #if EXFAT_READ_ONLY
-bool ExFatFile::mkdir(ExFatFile* parent, const char* path, bool pFlag) {
+inline bool ExFatFile::mkdir(ExFatFile* parent, const char* path, bool pFlag) {
   (void)parent;
   (void)path;
   (void)pFlag;
   return false;
 }
-bool ExFatFile::preAllocate(uint64_t length) {
+inline bool ExFatFile::preAllocate(uint64_t length) {
   (void)length;
   return false;
 }
-bool ExFatFile::rename(const char* newPath) {
+inline bool ExFatFile::rename(const char* newPath) {
   (void)newPath;
   return false;
 }
-bool ExFatFile::rename(ExFatFile* dirFile, const char* newPath) {
+inline bool ExFatFile::rename(ExFatFile* dirFile, const char* newPath) {
   (void)dirFile;
   (void)newPath;
   return false;
 }
-bool ExFatFile::sync() { return false; }
-bool ExFatFile::truncate() { return false; }
-size_t ExFatFile::write(const void* buf, size_t nbyte) {
+inline bool ExFatFile::sync() { return false; }
+inline bool ExFatFile::truncate() { return false; }
+inline size_t ExFatFile::write(const void* buf, size_t nbyte) {
   (void)buf;
   (void)nbyte;
   return false;
@@ -64,15 +67,15 @@ size_t ExFatFile::write(const void* buf, size_t nbyte) {
 //==============================================================================
 #else  // EXFAT_READ_ONLY
 //------------------------------------------------------------------------------
-static uint16_t exFatDirChecksum(const uint8_t* data, uint16_t checksum) {
+inline uint16_t exFatDirChecksum(const uint8_t* data, uint16_t checksum) {
   bool skip = data[0] == EXFAT_TYPE_FILE;
   for (size_t i = 0; i < 32; i += i == 1 && skip ? 3 : 1) {
-    checksum = ((checksum << 15) | (checksum >> 1)) + data[i];
+    checksum = ((uint32_t(checksum) << 15) | (checksum >> 1)) + data[i];
   }
   return checksum;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::addCluster() {
+inline bool ExFatFile::addCluster() {
   uint32_t find = m_vol->bitmapFind(m_curCluster ? m_curCluster + 1 : 0, 1);
   if (find < 2) {
     DBG_FAIL_MACRO;
@@ -121,7 +124,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::addDirCluster() {
+inline bool ExFatFile::addDirCluster() {
   uint32_t sector;
   uint32_t dl = isRoot() ? m_vol->rootLength() : m_dataLength;
   uint8_t* cache;
@@ -155,7 +158,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::mkdir(ExFatFile* parent, const char* path, bool pFlag) {
+inline bool ExFatFile::mkdir(ExFatFile* parent, const char* path, bool pFlag) {
   ExName_t fname;
   ExFatFile tmpDir;
 
@@ -197,7 +200,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::mkdir(ExFatFile* parent, ExName_t* fname) {
+inline bool ExFatFile::mkdir(ExFatFile* parent, ExName_t* fname) {
   if (!parent->isDir()) {
     DBG_FAIL_MACRO;
     goto fail;
@@ -226,7 +229,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::preAllocate(uint64_t length) {
+inline bool ExFatFile::preAllocate(uint64_t length) {
   uint32_t find;
   uint32_t need;
   if (!length || !isWritable() || m_firstCluster) {
@@ -256,7 +259,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::remove() {
+inline bool ExFatFile::remove() {
   uint8_t* cache;
   if (!isWritable()) {
     DBG_FAIL_MACRO;
@@ -298,11 +301,11 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::rename(const char* newPath) {
+inline bool ExFatFile::rename(const char* newPath) {
   return rename(m_vol->vwd(), newPath);
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::rename(ExFatFile* dirFile, const char* newPath) {
+inline bool ExFatFile::rename(ExFatFile* dirFile, const char* newPath) {
   ExFatFile file;
   ExFatFile oldFile;
 
@@ -338,7 +341,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::rmdir() {
+inline bool ExFatFile::rmdir() {
   int n;
   uint8_t dir[FS_DIR_SIZE];
   // must be open subdirectory
@@ -371,7 +374,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::sync() {
+inline bool ExFatFile::sync() {
   if (!isOpen()) {
     return true;
   }
@@ -391,7 +394,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::syncDir() {
+inline bool ExFatFile::syncDir() {
   DirFile_t* df;
   DirStream_t* ds;
   uint8_t* cache;
@@ -461,7 +464,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::timestamp(uint8_t flags, uint16_t year, uint8_t month,
+inline bool ExFatFile::timestamp(uint8_t flags, uint16_t year, uint8_t month,
                           uint8_t day, uint8_t hour, uint8_t minute,
                           uint8_t second) {
   DirFile_t* df;
@@ -544,7 +547,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatFile::truncate() {
+inline bool ExFatFile::truncate() {
   uint32_t toFree;
   // error if not a normal file or read-only
   if (!isWritable()) {
@@ -603,7 +606,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-size_t ExFatFile::write(const void* buf, size_t nbyte) {
+inline size_t ExFatFile::write(const void* buf, size_t nbyte) {
   // convert void* to uint8_t*  -  must be before goto statements
   const uint8_t* src = reinterpret_cast<const uint8_t*>(buf);
   uint8_t* cache;
@@ -753,3 +756,5 @@ fail:
 }
 #endif  // EXFAT_READ_ONLY
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

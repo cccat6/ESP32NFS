@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatFileSFN.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -36,7 +39,7 @@ namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
 // open with filename in fname
 #define SFN_OPEN_USES_CHKSUM 0
-bool FatFile::open(FatFile* dirFile, const FatSfn_t* fname, oflag_t oflag) {
+inline bool FatFile::open(FatFile* dirFile, const FatSfn_t* fname, oflag_t oflag) {
   uint16_t date;
   uint16_t time;
   uint8_t ms10;
@@ -155,7 +158,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openExistingSFN(const char* path) {
+inline bool FatFile::openExistingSFN(const char* path) {
   FatSfn_t fname;
   auto vol = FatVolume::cwv();
   while (*path == '/') {
@@ -181,7 +184,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool FatFile::openSFN(const FatSfn_t* fname) {
+inline bool FatFile::openSFN(const FatSfn_t* fname) {
   DirFat_t dir;
   const DirLfn_t* ldir;
   auto vol = m_vol;
@@ -236,7 +239,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // format directory name field from a 8.3 name string
-bool FatFile::parsePathName(const char* path, FatSfn_t* fname,
+inline bool FatFile::parsePathName(const char* path, FatSfn_t* fname,
                             const char** ptr) {
   uint8_t uc = 0;
   uint8_t lc = 0;
@@ -288,3 +291,5 @@ fail:
   return false;
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

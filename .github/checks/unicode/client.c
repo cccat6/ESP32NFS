@@ -7,6 +7,8 @@
 #include <unistd.h>
 #define CHECK(call)                                                                                \
   do {                                                                                             \
+    if (getenv("NFS_TEST_TRACE"))                                                                  \
+      fprintf(stderr, "CALL %s\n", #call);                                                         \
     int result = (call);                                                                           \
     if (result < 0) {                                                                              \
       fprintf(stderr, "%s: %s\n", #call, nfs_get_error(nfs));                                      \
@@ -14,7 +16,8 @@
     }                                                                                              \
   } while (0)
 int main(int argc, char **argv) {
-  assert(argc == 3);
+  assert(argc == 4);
+  size_t payload = (size_t)atoi(argv[3]);
   struct nfs_context *nfs = nfs_init_context();
   assert(nfs);
   nfs_set_version(nfs, 3);
@@ -33,10 +36,17 @@ int main(int argc, char **argv) {
   CHECK(nfs_mkdir(nfs, "/目录-É"));
   struct nfsfh *file = NULL;
   CHECK(nfs_creat(nfs, "/目录-é/混合-É😀.bin", 0644, &file));
-  unsigned char data[4096], got[4096];
+  unsigned char data[16384], got[16384];
   for (unsigned i = 0; i < sizeof(data); ++i)
     data[i] = i * 17;
-  assert(nfs_pwrite(nfs, file, data, sizeof(data), 0) == sizeof(data));
+  if (getenv("NFS_TEST_TRACE"))
+    fprintf(stderr, "WRITE %zu\n", sizeof(data));
+  for (size_t off = 0; off < sizeof(data); off += payload) {
+    int result = nfs_pwrite(nfs, file, data + off, payload, off);
+    if (result != (int)payload)
+      fprintf(stderr, "WRITE result %d: %s\n", result, nfs_get_error(nfs));
+    assert(result == (int)payload);
+  }
   for (unsigned i = 0; i < 16; ++i) {
     unsigned off = i * 131;
     unsigned char patch[73];
@@ -45,11 +55,25 @@ int main(int argc, char **argv) {
     memcpy(data + off, patch, sizeof(patch));
   }
   CHECK(nfs_fsync(nfs, file));
-  assert(nfs_pread(nfs, file, got, sizeof(got), 0) == sizeof(got) &&
-         !memcmp(data, got, sizeof(got)));
+  for (size_t off = 0; off < sizeof(got); off += payload)
+    assert(nfs_pread(nfs, file, got + off, payload, off) == payload);
+  assert(!memcmp(data, got, sizeof(got)));
+  struct nfsdir *bulk = NULL;
+  CHECK(nfs_opendir(nfs, "/bulk", &bulk));
+  struct nfsdirent *item;
+  unsigned count = 0;
+  while ((item = nfs_readdir(nfs, bulk)))
+    if (item->name[0] == 'F')
+      ++count;
+  nfs_closedir(nfs, bulk);
+  assert(count == 1100);
+  for (size_t off = 0; off < sizeof(got); off += payload)
+    assert(nfs_pread(nfs, file, got + off, payload, off) == payload);
+  assert(!memcmp(data, got, sizeof(got)));
   CHECK(nfs_rename(nfs, "/目录-é", "/移动-目录"));
-  assert(nfs_pread(nfs, file, got, sizeof(got), 0) == sizeof(got) &&
-         !memcmp(data, got, sizeof(got)));
+  for (size_t off = 0; off < sizeof(got); off += payload)
+    assert(nfs_pread(nfs, file, got + off, payload, off) == payload);
+  assert(!memcmp(data, got, sizeof(got)));
   CHECK(nfs_close(nfs, file));
   struct nfsdir *dir = NULL;
   CHECK(nfs_opendir(nfs, "/移动-目录", &dir));

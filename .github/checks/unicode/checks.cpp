@@ -24,7 +24,18 @@ static void path(PathVfs &fs, uint64_t id, const char *expected) {
     fprintf(stderr, "path %s != %s\n", canonical, expected);
   assert(!strcmp(canonical, expected));
 }
+bool otherOpenRoot();
 int checks() {
+  {
+    Fixture f(false, false);
+    f.volume.chvol();
+    assert(otherOpenRoot());
+    f.volume.end();
+    assert(!otherOpenRoot());
+    assert(f.volume.begin(&f.disk, true, 1));
+    assert(otherOpenRoot());
+  }
+  assert(!otherOpenRoot());
   {
     // A damaged LFN chain reports an I/O error during lookup and enumeration.
     Fixture f(false, false);
@@ -288,8 +299,11 @@ void stopped(int) {
 int main(int argc, char **argv) {
   if (argc == 1)
     return checks();
-  if (argc != 3)
+  if (argc != 4)
     return 2;
+  MemoryLimits limits;
+  limits.maxBytes = 192 * 1024;
+  assert(defaultMemory().configure(limits));
   Fixture f(!strcmp(argv[1], "exfat"), true);
   if (!f.backend.refreshSpace())
     return 4;
@@ -297,6 +311,7 @@ int main(int argc, char **argv) {
   esp32_nfs::Server server(f.fs);
   Config config;
   config.port = uint16_t(atoi(argv[2]));
+  config.blockSize = uint32_t(atoi(argv[3]));
   config.bytesPerSecond = 0;
   config.ioBytesPerPoll = 8192;
   config.directoryEntriesPerRpc = 16;
@@ -309,6 +324,13 @@ int main(int argc, char **argv) {
     auto directory = create(f.fs, f.fs.root(), "别名-目录", true);
     create(f.fs, directory, "Display_中文_测试.bin");
     alias = "/" + f.alias("/别名-目录") + "/" + f.alias("/别名-目录/Display_中文_测试.bin");
+  }
+  assert(f.volume.mkdir("/bulk", false));
+  for (unsigned i = 0; i < 1100; ++i) {
+    char p[80];
+    snprintf(p, sizeof(p), "/bulk/F%04u-中文.txt", i);
+    auto file = f.volume.open(p, O_CREAT | O_RDWR);
+    assert(file && file.write("x", 1) == 1 && file.close());
   }
   printf("READY %u %s\n", config.port, alias.c_str());
   fflush(stdout);

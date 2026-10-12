@@ -24,5 +24,4 @@
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 #pragma once
-#include "FatFormatter.h"
 #include "FatVolume.h"

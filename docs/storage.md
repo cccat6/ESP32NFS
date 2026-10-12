@@ -35,7 +35,7 @@ The application mounts LittleFS before starting the export. The adapter uses nat
 
 UTF-8 long names are enabled automatically. The [name guide](names-and-identities.md) covers the ready-to-use storage objects and canonical file identities.
 
-Initialize a card once, then create a separate `SdFatVolume` and `SdFatStorage` for each mounted partition. Pass a shared `PathVfs::Registry` to allocate path identities from one application-sized pool. Use one volume owner and a shared bus lease for coordinated access.
+Initialize a card once, then create a separate `SdFatVolume` and `SdFatStorage` for each mounted partition. Pass a shared `PathVfs::Registry` to account for path identities under one shared memory budget. Use one volume owner and a shared bus lease for coordinated access.
 
 The generic block layer supplies `Partition` views and primary MBR/GPT discovery for application-managed devices. Custom USB, SPI and virtual drivers expose the same block interface described in [driver-interface.md](driver-interface.md).
 
@@ -55,4 +55,4 @@ Integration order:
 
 The journal writes checksummed records and a durable commit marker before applying the transaction to the base filesystem. Recovery replays committed records. This provides transactional replacement rename and EXCLUSIVE CREATE for the SdFat backend.
 
-EXCLUSIVE CREATE stores request verifiers in `/.esp32-nfs/exclusive.bin`. The server manages this private namespace and filters it from exported directory results. Verifiers move with renamed paths and are reclaimed on deletion. Ordinary file operations use the filesystem's native metadata.
+EXCLUSIVE CREATE stores request verifiers in `/.esp32-nfs/exclusive.bin`. The server manages this private namespace and filters it from exported directory results. Verifiers move with renamed paths and their records are reused after deletion. The lookup index grows in small pages under the shared memory budget and is released when the backend ends its session. Ordinary file operations use the filesystem's native metadata.

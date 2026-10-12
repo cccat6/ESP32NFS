@@ -8,13 +8,12 @@
 #include <common/upcase.h>
 #include <string.h>
 #include <time.h>
-#if SD_FAT_VERSION != 20300
-#error "ESP32NFS SdFat adapter is validated against SdFat 2.3.0; pin that version."
-#endif
+
 namespace esp32_nfs {
 class SdFatStorage : public PathStorage {
 public:
-  explicit SdFatStorage(SdFatVolume &sd) : sd_(sd), verifiers_(sd) {}
+  explicit SdFatStorage(SdFatVolume &sd, Memory &memory = defaultMemory())
+      : verifiers_(sd, memory), sd_(sd) {}
   using Remount = bool (*)(void *);
   void attachTransactions(storage::SectorJournal &journal, Remount remount, void *context) {
     journal_ = &journal;
@@ -82,7 +81,21 @@ public:
     Status s = canonicalize(p, canonical, sizeof(canonical));
     if (s != Ok)
       return s;
-    return transact([&]() { return writeImpl(canonical, off, data, n); });
+    if (!n)
+      return transact([&]() { return writeImpl(canonical, off, data, n); });
+    size_t requested = n;
+    n = 0;
+    while (n < requested) {
+      size_t part = std::min(requested - n, BlockSize);
+      size_t expected = part;
+      s = transact([&]() { return writeImpl(canonical, off + n, data + n, part); });
+      if (s != Ok)
+        return s;
+      n += part;
+      if (part != expected)
+        return Ok;
+    }
+    return Ok;
   }
   Status create(const char *p, bool dir) override {
     char canonical[PathSize];
@@ -344,6 +357,11 @@ private:
   }
 
 public:
+  Status releaseResources() override {
+    invalidateCaches();
+    verifiers_.release();
+    return poison_ ? Io : Ok;
+  }
   void invalidateCaches() override {
     readFile_.close();
     readPath_[0] = 0;
@@ -428,13 +446,16 @@ public:
       return false;
     cachedSpace_.totalBytes = uint64_t(sd_.clusterCount()) * sd_.bytesPerCluster();
     cachedSpace_.freeBytes = uint64_t(free) * sd_.bytesPerCluster();
-    cachedSpace_.totalFiles = ESP32_NFS_HANDLE_COUNT;
+    cachedSpace_.totalFiles = 0;
     cachedSpace_.freeFiles = 0;
     spaceValid_ = true;
     return true;
   }
-  void setDirectoryScanBudget(uint32_t count) {
+  Status setDirectoryScanBudget(uint32_t count) {
+    if (!count)
+      return Invalid;
     scanBudget_ = count;
+    return Ok;
   }
 
 private:
@@ -552,7 +573,7 @@ private:
   void *context_ = nullptr;
   bool poison_ = false;
   SdFatVerifiers verifiers_;
-  Status transactImpl(Status (*operation)(void *), void *argument);
+  __attribute__((noinline)) Status transactImpl(Status (*operation)(void *), void *argument);
   template <class F> Status transact(F operation) {
     return transactImpl([](void *p) { return (*static_cast<F *>(p))(); }, &operation);
   }
@@ -592,3 +613,5 @@ private:
   }
 };
 } // namespace esp32_nfs
+
+#include "SdFatStorage.ipp"

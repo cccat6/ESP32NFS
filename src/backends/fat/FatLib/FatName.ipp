@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatName.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -35,7 +38,7 @@ namespace esp32_nfs { namespace fat {
 #include "FatLib.h"
 namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
-uint16_t FatFile::getLfnChar(const DirLfn_t* ldir, uint8_t i) {
+inline uint16_t FatFile::getLfnChar(const DirLfn_t* ldir, uint8_t i) {
   if (i < 5) {
     return getLe16(ldir->unicode1 + 2 * i);
   } else if (i < 11) {
@@ -47,11 +50,11 @@ uint16_t FatFile::getLfnChar(const DirLfn_t* ldir, uint8_t i) {
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::getName(char* name, size_t size) {
+inline size_t FatFile::getName(char* name, size_t size) {
   return getName8(name, size);
 }
 //------------------------------------------------------------------------------
-size_t FatFile::getName7(char* name, size_t size) {
+inline size_t FatFile::getName7(char* name, size_t size) {
   FatFile dir;
   const DirLfn_t* ldir;
   size_t n = 0;
@@ -98,7 +101,7 @@ fail:
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::getName8(char* name, size_t size) {
+inline size_t FatFile::getName8(char* name, size_t size) {
   const char* end = name + size;
   char* str = name;
   char* ptr;
@@ -167,7 +170,7 @@ fail:
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::getSFN(char* name, size_t size) {
+inline size_t FatFile::getSFN(char* name, size_t size) {
   char c;
   uint8_t j = 0;
   uint8_t lcBit = FAT_CASE_LC_BASE;
@@ -224,11 +227,11 @@ fail:
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printName(print_t* pr) {
+inline size_t FatFile::printName(print_t* pr) {
   return printName8(pr);
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printName7(print_t* pr) {
+inline size_t FatFile::printName7(print_t* pr) {
   FatFile dir;
   const DirLfn_t* ldir;
   size_t n = 0;
@@ -274,7 +277,7 @@ fail:
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printName8(print_t* pr) {
+inline size_t FatFile::printName8(print_t* pr) {
   FatFile dir;
   const DirLfn_t* ldir;
   uint16_t hs = 0;
@@ -339,7 +342,7 @@ fail:
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printSFN(print_t* pr) {
+inline size_t FatFile::printSFN(print_t* pr) {
   char name[13];
   if (!getSFN(name, sizeof(name))) {
     DBG_FAIL_MACRO;
@@ -351,3 +354,5 @@ fail:
   return 0;
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

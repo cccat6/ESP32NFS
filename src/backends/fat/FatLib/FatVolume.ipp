@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -23,37 +24,35 @@
  * DEALINGS IN THE SOFTWARE.
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
-#pragma once
-#include "../common/FsBlockDevice.h"
 namespace esp32_nfs { namespace fat {
-/**
- * \class ExFatFormatter
- * \brief Format an exFAT volume.
- */
-class ExFatFormatter {
- public:
-  /** Constructor. */
-  ExFatFormatter() = default;  // cppcheck-suppress uninitMemberVar
-  /**
-   * Format an exFAT volume.
-   *
-   * \param[in] dev Block device for volume.
-   * \param[in] secBuf buffer for writing to volume.
-   * \param[in] pr Print device for progress output.
-   *
-   * \return true for success or false for failure.
-   */
-  bool format(FsBlockDevice* dev, uint8_t* secBuf, print_t* pr = nullptr);
 
- private:
-  bool syncUpcase();
-  bool writeUpcase(uint32_t sector);
-  bool writeUpcaseByte(uint8_t b);
-  bool writeUpcaseUnicode(uint16_t unicode);
-  uint32_t m_upcaseSector;
-  uint32_t m_upcaseChecksum;
-  uint32_t m_upcaseSize;
-  FsBlockDevice* m_dev;
-  uint8_t* m_secBuf;
-};
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
+#define DBG_FILE "FatVolume.cpp"
 } } // namespace esp32_nfs::fat
+// Arduino resolves the library through its public header.
+#include <SdFat.h>
+
+#include <common/DebugMacros.h>
+#include "FatLib.h"
+namespace esp32_nfs { namespace fat {
+//------------------------------------------------------------------------------
+inline bool FatVolume::chdir(const char* path) {
+  FatFile dir;
+  if (!dir.open(vwd(), path, O_RDONLY)) {
+    DBG_FAIL_MACRO;
+    goto fail;
+  }
+  if (!dir.isDir()) {
+    DBG_FAIL_MACRO;
+    goto fail;
+  }
+  m_vwd.copy(&dir);
+  return true;
+
+fail:
+  return false;
+}
+} } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

@@ -535,7 +535,7 @@ class FsBaseFile {
    * \return true for success or false for failure.
    */
   bool open(const char* path, oflag_t oflag = O_RDONLY) {
-    return FsVolume::m_cwv && open(FsVolume::m_cwv, path, oflag);
+    return FsVolume::currentVolume() && open(FsVolume::currentVolume(), path, oflag);
   }
   /** Open a file or directory by index in the current working directory.
    *

@@ -1,7 +1,8 @@
+#pragma once
 // SPDX-License-Identifier: MIT
 #include "SdFatStorage.h"
 namespace esp32_nfs {
-Status SdFatStorage::transactImpl(Status (*operation)(void *), void *argument) {
+inline Status SdFatStorage::transactImpl(Status (*operation)(void *), void *argument) {
   if (poison_)
     return Io;
   invalidateCaches();

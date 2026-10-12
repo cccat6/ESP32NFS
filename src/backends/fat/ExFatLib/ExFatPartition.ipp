@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -25,6 +26,8 @@
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
 namespace esp32_nfs { namespace fat {
 
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "ExFatPartition.cpp"
 } } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
@@ -35,7 +38,7 @@ namespace esp32_nfs { namespace fat {
 namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
 // return 0 if error, 1 if no space, else start cluster.
-uint32_t ExFatPartition::bitmapFind(uint32_t cluster, uint32_t count) {
+inline uint32_t ExFatPartition::bitmapFind(uint32_t cluster, uint32_t count) {
   uint32_t start = cluster ? cluster - 2 : m_bitmapStart;
   if (start >= m_clusterCount) {
     start = 0;
@@ -83,7 +86,7 @@ uint32_t ExFatPartition::bitmapFind(uint32_t cluster, uint32_t count) {
   return 0;
 }
 //------------------------------------------------------------------------------
-bool ExFatPartition::bitmapModify(uint32_t cluster, uint32_t count,
+inline bool ExFatPartition::bitmapModify(uint32_t cluster, uint32_t count,
                                   bool value) {
   uint32_t sector;
   uint32_t start = cluster - 2;
@@ -133,7 +136,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-uint32_t ExFatPartition::chainSize(uint32_t cluster) {
+inline uint32_t ExFatPartition::chainSize(uint32_t cluster) {
   uint32_t n = 0;
   int8_t status;
   do {
@@ -144,7 +147,7 @@ uint32_t ExFatPartition::chainSize(uint32_t cluster) {
   return n;
 }
 //------------------------------------------------------------------------------
-uint8_t* ExFatPartition::dirCache(const DirPos_t* pos, uint8_t options) {
+inline uint8_t* ExFatPartition::dirCache(const DirPos_t* pos, uint8_t options) {
   uint32_t sector = clusterStartSector(pos->cluster);
   sector += (m_clusterMask & pos->position) >> m_bytesPerSectorShift;
   uint8_t* cache = dataCachePrepare(sector, options);
@@ -152,7 +155,7 @@ uint8_t* ExFatPartition::dirCache(const DirPos_t* pos, uint8_t options) {
 }
 //------------------------------------------------------------------------------
 // return -1 error, 0 EOC, 1 OK
-int8_t ExFatPartition::dirSeek(DirPos_t* pos, uint32_t offset) {
+inline int8_t ExFatPartition::dirSeek(DirPos_t* pos, uint32_t offset) {
   int8_t status;
   uint32_t tmp = (m_clusterMask & pos->position) + offset;
   pos->position += offset;
@@ -171,7 +174,7 @@ int8_t ExFatPartition::dirSeek(DirPos_t* pos, uint32_t offset) {
 }
 //------------------------------------------------------------------------------
 // return -1 error, 0 EOC, 1 OK
-int8_t ExFatPartition::fatGet(uint32_t cluster, uint32_t* value) {
+inline int8_t ExFatPartition::fatGet(uint32_t cluster, uint32_t* value) {
   const uint8_t* cache;
   uint32_t next;
   uint32_t sector;
@@ -194,7 +197,7 @@ int8_t ExFatPartition::fatGet(uint32_t cluster, uint32_t* value) {
   return 1;
 }
 //------------------------------------------------------------------------------
-bool ExFatPartition::fatPut(uint32_t cluster, uint32_t value) {
+inline bool ExFatPartition::fatPut(uint32_t cluster, uint32_t value) {
   uint32_t sector;
   uint8_t* cache;
   if (cluster < 2 || cluster > (m_clusterCount + 1)) {
@@ -214,7 +217,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-bool ExFatPartition::freeChain(uint32_t cluster) {
+inline bool ExFatPartition::freeChain(uint32_t cluster) {
   uint32_t next;
   uint32_t start = cluster;
   int8_t status;
@@ -244,7 +247,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-int32_t ExFatPartition::freeClusterCount() {
+inline int32_t ExFatPartition::freeClusterCount() {
   uint32_t nc = 0;
   uint32_t sector = m_clusterHeapStartSector;
   uint32_t usedCount = 0;
@@ -273,7 +276,7 @@ int32_t ExFatPartition::freeClusterCount() {
   }
 }
 //------------------------------------------------------------------------------
-bool ExFatPartition::init(FsBlockDevice* dev, uint8_t part, uint32_t volStart) {
+inline bool ExFatPartition::init(FsBlockDevice* dev, uint8_t part, uint32_t volStart) {
   pbs_t* pbs;
   const BpbExFat_t* bpb;
   const MbrSector_t* mbr;
@@ -333,8 +336,10 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-uint32_t ExFatPartition::rootLength() {
+inline uint32_t ExFatPartition::rootLength() {
   uint32_t nc = chainSize(m_rootDirectoryCluster);
   return nc << bytesPerClusterShift();
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

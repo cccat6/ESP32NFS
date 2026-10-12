@@ -2,8 +2,11 @@
 #pragma once
 // Discover the Arduino dependency before its internal headers.
 #include <SdFat.h>
+#if SD_FAT_VERSION != 20300
+#error "ESP32NFS SdFat adapter is validated against SdFat 2.3.0; pin that version."
+#endif
 
-#include "fat/FsLib/FsLib.h"
+#include "fat/Runtime.h"
 namespace esp32_nfs {
 // UTF-8 names and generic block I/O are fixed inside the filesystem implementation.
 using SdFatVolume = fat::FsVolume;

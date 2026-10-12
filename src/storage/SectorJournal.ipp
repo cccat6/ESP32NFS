@@ -1,40 +1,41 @@
+#pragma once
 // SPDX-License-Identifier: MIT
 #include "SectorJournal.h"
 #include "../Digest.h"
 #include <string.h>
 namespace esp32_nfs {
 namespace storage {
-namespace {
-void put32(uint8_t *p, uint32_t n) {
+namespace journal_detail {
+inline void put32(uint8_t *p, uint32_t n) {
   for (unsigned i = 0; i < 4; ++i)
     p[i] = n >> (24 - 8 * i);
 }
-void put64(uint8_t *p, uint64_t n) {
+inline void put64(uint8_t *p, uint64_t n) {
   for (unsigned i = 0; i < 8; ++i)
     p[i] = n >> (56 - 8 * i);
 }
-uint32_t get32(const uint8_t *p) {
+inline uint32_t get32(const uint8_t *p) {
   uint32_t n = 0;
   for (unsigned i = 0; i < 4; ++i)
     n = n << 8 | p[i];
   return n;
 }
-uint64_t get64(const uint8_t *p) {
+inline uint64_t get64(const uint8_t *p) {
   uint64_t n = 0;
   for (unsigned i = 0; i < 8; ++i)
     n = n << 8 | p[i];
   return n;
 }
-void seal(uint8_t *p) {
+inline void seal(uint8_t *p) {
   sha256(p, 480, p + 480);
 }
-bool valid(const uint8_t *p) {
+inline bool valid(const uint8_t *p) {
   uint8_t d[32];
   sha256(p, 480, d);
   return !memcmp(d, p + 480, 32);
 }
 } // namespace
-Error SectorJournal::validate() const {
+inline Error SectorJournal::validate() const {
   auto g = parent_.geometry();
   if (g.blockBytes != 512 || !g.identity || !g.durableFlush || !g.isolatedWrites || !g.writable)
     return Error::Unsupported;
@@ -46,7 +47,7 @@ Error SectorJournal::validate() const {
     return Error::Invalid;
   return Error::Ok;
 }
-Geometry SectorJournal::geometry() const {
+inline Geometry SectorJournal::geometry() const {
   auto g = parent_.geometry();
   g.blocks = dataBlocks_;
   g.maxTransferBlocks = 1;
@@ -54,37 +55,37 @@ Geometry SectorJournal::geometry() const {
   g.writable &= healthy();
   return g;
 }
-Error SectorJournal::superblock(uint32_t state, uint32_t count) {
+inline Error SectorJournal::superblock(uint32_t state, uint32_t count) {
   if (sequence_ == UINT64_MAX)
     return fail(Error::RecoveryRequired);
   memset(scratch_, 0, sizeof(scratch_));
   memcpy(scratch_, "ENFSTX01", 8);
-  put64(scratch_ + 8, ++sequence_);
-  put32(scratch_ + 16, state);
-  put32(scratch_ + 20, count);
-  put64(scratch_ + 24, dataStart_);
-  put64(scratch_ + 32, dataBlocks_);
-  put64(scratch_ + 40, parent_.geometry().identity);
-  put64(scratch_ + 48, transaction_);
-  put32(scratch_ + 56, MaxSectors);
-  seal(scratch_);
+  journal_detail::put64(scratch_ + 8, ++sequence_);
+  journal_detail::put32(scratch_ + 16, state);
+  journal_detail::put32(scratch_ + 20, count);
+  journal_detail::put64(scratch_ + 24, dataStart_);
+  journal_detail::put64(scratch_ + 32, dataBlocks_);
+  journal_detail::put64(scratch_ + 40, parent_.geometry().identity);
+  journal_detail::put64(scratch_ + 48, transaction_);
+  journal_detail::put32(scratch_ + 56, MaxSectors);
+  journal_detail::seal(scratch_);
   Error e = parent_.write(journalStart_ + (sequence_ & 1), 1, scratch_, 512);
   if (e == Error::Ok)
     e = parent_.flush();
   return e == Error::Ok ? e : fail(e);
 }
-bool SectorJournal::decodeSuper(const uint8_t *p, uint64_t &seq, uint32_t &state,
+inline bool SectorJournal::decodeSuper(const uint8_t *p, uint64_t &seq, uint32_t &state,
                                 uint32_t &count) const {
-  if (memcmp(p, "ENFSTX01", 8) || !valid(p) || get64(p + 24) != dataStart_ ||
-      get64(p + 32) != dataBlocks_ || get64(p + 40) != parent_.geometry().identity ||
-      get32(p + 56) != MaxSectors)
+  if (memcmp(p, "ENFSTX01", 8) || !journal_detail::valid(p) || journal_detail::get64(p + 24) != dataStart_ ||
+      journal_detail::get64(p + 32) != dataBlocks_ || journal_detail::get64(p + 40) != parent_.geometry().identity ||
+      journal_detail::get32(p + 56) != MaxSectors)
     return false;
-  seq = get64(p + 8);
-  state = get32(p + 16);
-  count = get32(p + 20);
+  seq = journal_detail::get64(p + 8);
+  state = journal_detail::get32(p + 16);
+  count = journal_detail::get32(p + 20);
   return seq && state <= 2 && count <= MaxSectors;
 }
-Error SectorJournal::formatJournal() {
+inline Error SectorJournal::formatJournal() {
   Error e = validate();
   if (e != Error::Ok)
     return e;
@@ -105,15 +106,15 @@ Error SectorJournal::formatJournal() {
   count_ = 0;
   return Error::Ok;
 }
-Error SectorJournal::readRecord(uint32_t slot, uint64_t &lba, uint8_t *data, uint32_t &blocks) {
+inline Error SectorJournal::readRecord(uint32_t slot, uint64_t &lba, uint8_t *data, uint32_t &blocks) {
   Error e = parent_.read(journalStart_ + 2 + 2 * slot, 1, scratch_, 512);
   if (e != Error::Ok)
     return e;
-  if (memcmp(scratch_, "ENFSSEC1", 8) || !valid(scratch_) || get64(scratch_ + 8) != transaction_)
+  if (memcmp(scratch_, "ENFSSEC1", 8) || !journal_detail::valid(scratch_) || journal_detail::get64(scratch_ + 8) != transaction_)
     return Error::RecoveryRequired;
-  lba = get64(scratch_ + 16);
-  blocks = get32(scratch_ + 56);
-  bool zero = get32(scratch_ + 60) == 1;
+  lba = journal_detail::get64(scratch_ + 16);
+  blocks = journal_detail::get32(scratch_ + 56);
+  bool zero = journal_detail::get32(scratch_ + 60) == 1;
   if (!blocks || lba >= dataBlocks_ || blocks > dataBlocks_ - lba)
     return Error::RecoveryRequired;
   uint8_t expected[32];
@@ -128,38 +129,38 @@ Error SectorJournal::readRecord(uint32_t slot, uint64_t &lba, uint8_t *data, uin
   sha256(data, 512, digest);
   return memcmp(expected, digest, 32) ? Error::RecoveryRequired : Error::Ok;
 }
-Error SectorJournal::writeRecord(uint32_t slot, uint64_t lba, const uint8_t *data) {
+inline Error SectorJournal::writeRecord(uint32_t slot, uint64_t lba, const uint8_t *data) {
   Error e = parent_.write(journalStart_ + 3 + 2 * slot, 1, data, 512);
   if (e != Error::Ok)
     return fail(e);
   memset(scratch_, 0, 512);
   memcpy(scratch_, "ENFSSEC1", 8);
-  put64(scratch_ + 8, transaction_);
-  put64(scratch_ + 16, lba);
+  journal_detail::put64(scratch_ + 8, transaction_);
+  journal_detail::put64(scratch_ + 16, lba);
   sha256(data, 512, scratch_ + 24);
-  put32(scratch_ + 56, 1);
-  seal(scratch_);
+  journal_detail::put32(scratch_ + 56, 1);
+  journal_detail::seal(scratch_);
   e = parent_.write(journalStart_ + 2 + 2 * slot, 1, scratch_, 512);
   return e == Error::Ok ? e : fail(e);
 }
-Error SectorJournal::writeZero(uint32_t slot) {
+inline Error SectorJournal::writeZero(uint32_t slot) {
   uint8_t digest[32];
   memset(scratch_, 0, 512);
   sha256(scratch_, 512, digest);
   memset(scratch_, 0, 512);
   memcpy(scratch_, "ENFSSEC1", 8);
-  put64(scratch_ + 8, transaction_);
-  put64(scratch_ + 16, index_[slot].lba);
+  journal_detail::put64(scratch_ + 8, transaction_);
+  journal_detail::put64(scratch_ + 16, index_[slot].lba);
   memcpy(scratch_ + 24, digest, 32);
-  put32(scratch_ + 56, index_[slot].blocks);
-  put32(scratch_ + 60, 1);
-  seal(scratch_);
+  journal_detail::put32(scratch_ + 56, index_[slot].blocks);
+  journal_detail::put32(scratch_ + 60, 1);
+  journal_detail::seal(scratch_);
   Error e = parent_.write(journalStart_ + 2 + 2 * slot, 1, scratch_, 512);
   if (e == Error::Ok)
     index_[slot].dirty = false;
   return e == Error::Ok ? e : fail(e);
 }
-Error SectorJournal::recover() {
+inline Error SectorJournal::recover() {
   Error e = validate();
   if (e != Error::Ok)
     return e;
@@ -180,7 +181,7 @@ Error SectorJournal::recover() {
       best = seq;
       bestState = state;
       bestCount = count;
-      bestTx = get64(scratch_ + 48);
+      bestTx = journal_detail::get64(scratch_ + 48);
     }
   }
   if (!best)
@@ -221,7 +222,7 @@ Error SectorJournal::recover() {
     return fail(Error::RecoveryRequired);
   return Error::Ok;
 }
-Error SectorJournal::begin() {
+inline Error SectorJournal::begin() {
   if (!healthy() || active_ || parentGeneration_ != parent_.geometry().generation)
     return Error::RecoveryRequired;
   count_ = 0;
@@ -231,7 +232,7 @@ Error SectorJournal::begin() {
     active_ = true;
   return e;
 }
-Error SectorJournal::stagingBarrier() {
+inline Error SectorJournal::stagingBarrier() {
   if (!healthy())
     return Error::RecoveryRequired;
   Error e = Error::Ok;
@@ -244,7 +245,7 @@ Error SectorJournal::stagingBarrier() {
   e = parent_.flush();
   return e == Error::Ok ? e : fail(e);
 }
-Error SectorJournal::commit() {
+inline Error SectorJournal::commit() {
   if (!healthy() || !active_)
     return Error::RecoveryRequired;
   Error e = stagingBarrier();
@@ -262,7 +263,7 @@ Error SectorJournal::commit() {
     mountGeneration_ = generation;
   return result;
 }
-Error SectorJournal::abort() {
+inline Error SectorJournal::abort() {
   if (fault_)
     return Error::RecoveryRequired;
   if (!active_)
@@ -274,7 +275,7 @@ Error SectorJournal::abort() {
   // the filesystem adapter still remounts its discarded transaction caches.
   return e;
 }
-Result SectorJournal::start(const Request &r) {
+inline Result SectorJournal::start(const Request &r) {
   auto g = geometry();
   if (!g.generation || r.generation != g.generation)
     return {Error::Changed};

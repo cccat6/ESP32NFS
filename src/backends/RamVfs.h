@@ -122,7 +122,8 @@ public:
                 const SetAttr &a, uint64_t &id) override {
     if (how == 2)
       return NotSupported;
-    if (!strcmp(name, ".") || !strcmp(name, ".."))
+    if (!name) return Invalid;
+  if (!strcmp(name, ".") || !strcmp(name, ".."))
       return Exist;
     if (a.atimeHow || a.mtimeHow)
       return NotSupported;
@@ -164,7 +165,8 @@ public:
     return NoSpace;
   }
   Status remove(uint64_t d, const char *name, bool directory) override {
-    if (!strcmp(name, ".") || !strcmp(name, ".."))
+    if (!name) return Invalid;
+  if (!strcmp(name, ".") || !strcmp(name, ".."))
       return Invalid;
     char p[PathSize];
     Status s = child(d, name, p);
@@ -185,7 +187,7 @@ public:
     return Ok;
   }
   Status rename(uint64_t from, const char *old, uint64_t to, const char *name) override {
-    if (!strcmp(old, ".") || !strcmp(old, "..") || !strcmp(name, ".") || !strcmp(name, ".."))
+    if (!old || !name || !strcmp(old, ".") || !strcmp(old, "..") || !strcmp(name, ".") || !strcmp(name, ".."))
       return Invalid;
     char a[PathSize], b[PathSize];
     Status s = child(from, old, a);

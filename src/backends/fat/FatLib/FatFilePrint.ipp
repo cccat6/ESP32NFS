@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -28,6 +29,8 @@
 
 #include <math.h>
 namespace esp32_nfs { namespace fat {
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatFilePrint.cpp"
 } } // namespace esp32_nfs::fat
 #include <common/DebugMacros.h>
@@ -35,7 +38,7 @@ namespace esp32_nfs { namespace fat {
 namespace esp32_nfs { namespace fat {
 
 //------------------------------------------------------------------------------
-bool FatFile::ls(print_t* pr, uint8_t flags, uint8_t indent) {
+inline bool FatFile::ls(print_t* pr, uint8_t flags, uint8_t indent) {
   FatFile file;
   if (!isDir()) {
     DBG_FAIL_MACRO;
@@ -78,7 +81,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printAccessDate(print_t* pr) {
+inline size_t FatFile::printAccessDate(print_t* pr) {
   uint16_t date;
   if (getAccessDate(&date)) {
     return fsPrintDate(pr, date);
@@ -86,7 +89,7 @@ size_t FatFile::printAccessDate(print_t* pr) {
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printCreateDateTime(print_t* pr) {
+inline size_t FatFile::printCreateDateTime(print_t* pr) {
   uint16_t date;
   uint16_t time;
   if (getCreateDateTime(&date, &time)) {
@@ -95,7 +98,7 @@ size_t FatFile::printCreateDateTime(print_t* pr) {
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printModifyDateTime(print_t* pr) {
+inline size_t FatFile::printModifyDateTime(print_t* pr) {
   uint16_t date;
   uint16_t time;
   if (getModifyDateTime(&date, &time)) {
@@ -104,7 +107,7 @@ size_t FatFile::printModifyDateTime(print_t* pr) {
   return 0;
 }
 //------------------------------------------------------------------------------
-size_t FatFile::printFileSize(print_t* pr) {
+inline size_t FatFile::printFileSize(print_t* pr) {
   char buf[11];
   char* ptr = buf + sizeof(buf);
   *--ptr = 0;
@@ -115,3 +118,5 @@ size_t FatFile::printFileSize(print_t* pr) {
   return pr->write(buf);
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

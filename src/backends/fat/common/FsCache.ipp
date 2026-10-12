@@ -1,5 +1,6 @@
+#pragma once
 /**
- * Copyright (c) 2011-2024 Bill Greiman
+ * Copyright (c) 2011-2022 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
  *
  * MIT License
@@ -23,49 +24,66 @@
  * DEALINGS IN THE SOFTWARE.
  */
 // SdFat 2.3.0 filesystem core, isolated UTF-8 variant; see README.md.
+namespace esp32_nfs { namespace fat {
+
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
+#define DBG_FILE "FsCache.cpp"
+} } // namespace esp32_nfs::fat
 // Arduino resolves the library through its public header.
 #include <SdFat.h>
 
-#include "FsLib.h"
-namespace esp32_nfs { namespace fat {
-FsVolume* FsVolume::m_cwv = nullptr;
-//------------------------------------------------------------------------------
-bool FsVolume::begin(FsBlockDevice* blockDev, bool setCwv, uint8_t part,
-                     uint32_t volStart) {
-  m_fVol = nullptr;
-  m_xVol = new (m_volMem) ExFatVolume;
-  if (m_xVol && m_xVol->begin(blockDev, false, part, volStart)) {
-    goto done;
-  }
-  m_xVol = nullptr;
-  m_fVol = new (m_volMem) FatVolume;
-  if (m_fVol && m_fVol->begin(blockDev, false, part, volStart)) {
-    goto done;
-  }
-  m_fVol = nullptr;
-  return false;
+#include "FsCache.h"
 
-done:
-  if (setCwv || !m_cwv) {
-    m_cwv = this;
+#include <common/DebugMacros.h>
+namespace esp32_nfs { namespace fat {
+//------------------------------------------------------------------------------
+inline uint8_t* FsCache::prepare(uint32_t sector, uint8_t option) {
+  if (!m_blockDev) {
+    DBG_FAIL_MACRO;
+    goto fail;
+  }
+  if (m_sector != sector) {
+    if (!sync()) {
+      DBG_FAIL_MACRO;
+      goto fail;
+    }
+    if (!(option & CACHE_OPTION_NO_READ)) {
+      if (!m_blockDev->readSector(sector, m_buffer)) {
+        DBG_FAIL_MACRO;
+        goto fail;
+      }
+    }
+    m_status = 0;
+    m_sector = sector;
+  }
+  m_status |= option & CACHE_STATUS_MASK;
+  return m_buffer;
+
+fail:
+  return nullptr;
+}
+//------------------------------------------------------------------------------
+inline bool FsCache::sync() {
+  if (m_status & CACHE_STATUS_DIRTY) {
+    if (!m_blockDev->writeSector(m_sector, m_buffer)) {
+      DBG_FAIL_MACRO;
+      goto fail;
+    }
+    // mirror second FAT
+    if (m_status & CACHE_STATUS_MIRROR_FAT) {
+      if (!m_blockDev->writeSector(m_sector + m_mirrorOffset, m_buffer)) {
+        DBG_FAIL_MACRO;
+        goto fail;
+      }
+    }
+    m_status &= ~CACHE_STATUS_DIRTY;
   }
   return true;
+
+fail:
+  return false;
 }
-//------------------------------------------------------------------------------
-bool FsVolume::ls(print_t* pr, const char* path, uint8_t flags) {
-  FsBaseFile dir;
-  return dir.open(this, path, O_RDONLY) && dir.ls(pr, flags);
-}
-//------------------------------------------------------------------------------
-FsBaseFile FsVolume::open(const char* path, oflag_t oflag) {
-  FsBaseFile tmpFile;
-  tmpFile.open(this, path, oflag);
-  return tmpFile;
-}
-#if ENABLE_ARDUINO_STRING
-//------------------------------------------------------------------------------
-FsBaseFile FsVolume::open(const String& path, oflag_t oflag) {
-  return open(path.c_str(), oflag);
-}
-#endif  // ENABLE_ARDUINO_STRING
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")

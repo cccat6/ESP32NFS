@@ -1,3 +1,4 @@
+#pragma once
 /**
  * Copyright (c) 2011-2024 Bill Greiman
  * This file is part of the SdFat library for SD memory cards.
@@ -28,13 +29,15 @@
 
 #include <string.h>
 namespace esp32_nfs { namespace fat {
+#pragma push_macro("DBG_FILE")
+#undef DBG_FILE
 #define DBG_FILE "FatPartition.cpp"
 } } // namespace esp32_nfs::fat
 #include <common/DebugMacros.h>
 #include "FatLib.h"
 namespace esp32_nfs { namespace fat {
 //------------------------------------------------------------------------------
-bool FatPartition::allocateCluster(uint32_t current, uint32_t* next) {
+inline bool FatPartition::allocateCluster(uint32_t current, uint32_t* next) {
   uint32_t find;
   bool setStart;
   if (m_allocSearchStart < current) {
@@ -96,7 +99,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // find a contiguous group of clusters
-bool FatPartition::allocContiguous(uint32_t count, uint32_t* firstCluster) {
+inline bool FatPartition::allocContiguous(uint32_t count, uint32_t* firstCluster) {
   // flag to save place to start next search
   bool setStart = true;
   // start of group
@@ -161,7 +164,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // Fetch a FAT entry - return -1 error, 0 EOC, else 1.
-int8_t FatPartition::fatGet(uint32_t cluster, uint32_t* value) {
+inline int8_t FatPartition::fatGet(uint32_t cluster, uint32_t* value) {
   uint32_t sector;
   uint32_t next;
   const uint8_t* pc;
@@ -228,7 +231,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // Store a FAT entry
-bool FatPartition::fatPut(uint32_t cluster, uint32_t value) {
+inline bool FatPartition::fatPut(uint32_t cluster, uint32_t value) {
   uint32_t sector;
   uint8_t* pc;
 
@@ -305,7 +308,7 @@ fail:
 }
 //------------------------------------------------------------------------------
 // free a cluster chain
-bool FatPartition::freeChain(uint32_t cluster) {
+inline bool FatPartition::freeChain(uint32_t cluster) {
   uint32_t next;
   int8_t fg;
   do {
@@ -333,7 +336,7 @@ fail:
   return false;
 }
 //------------------------------------------------------------------------------
-int32_t FatPartition::freeClusterCount() {
+inline int32_t FatPartition::freeClusterCount() {
 #if MAINTAIN_FREE_CLUSTER_COUNT
   if (m_freeClusterCount >= 0) {
     return m_freeClusterCount;
@@ -397,7 +400,7 @@ fail:
   return -1;
 }
 //------------------------------------------------------------------------------
-bool FatPartition::init(FsBlockDevice* dev, uint8_t part, uint32_t volStart) {
+inline bool FatPartition::init(FsBlockDevice* dev, uint8_t part, uint32_t volStart) {
   uint32_t countOfClusters;
   uint32_t totalSectors;
   m_blockDev = dev;
@@ -507,3 +510,5 @@ fail:
   return false;
 }
 } } // namespace esp32_nfs::fat
+
+#pragma pop_macro("DBG_FILE")
